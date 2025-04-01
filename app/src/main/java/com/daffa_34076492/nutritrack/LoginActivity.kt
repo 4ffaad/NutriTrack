@@ -23,6 +23,7 @@ import com.daffa_34076492.nutritrack.ui.theme.NutriTrack_Daffa_34076492Theme
 import java.io.BufferedReader
 import java.io.InputStreamReader
 
+
 class LoginActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -176,8 +177,10 @@ fun LoginScreen() {
                         it["User_ID"] == userId && it["PhoneNumber"] == phoneNumber
                     }
                     if (isValid) {
-                        // Navigate to the next screen
-                        val intent = Intent(context, QuestionnaireActivity::class.java)
+                        // Pass userId to QuestionnaireActivity using Intent
+                        val intent = Intent(context, QuestionnaireActivity::class.java).apply {
+                            putExtra("userId", userId) // Pass the actual userId
+                        }
                         context.startActivity(intent)
                     } else {
                         errorMessage = "Invalid User ID or Phone Number"
@@ -208,31 +211,47 @@ fun LoginScreen() {
     }
 }
 
-// Function to load CSV data
+/**
+ * Loads and parses user nutrition data from a CSV file in the assets folder.
+ * @param context Android context to access assets
+ * @return List of user records, where each record is a map of field names to values
+ */
 fun loadCSVData(context: Context): List<Map<String, String>> {
-    val userData = mutableListOf<Map<String, String>>()
+    val userRecords = mutableListOf<Map<String, String>>()
+
     try {
-        // Open the CSV file from the assets folder
-        val inputStream = context.assets.open("data.csv")
-        val reader = BufferedReader(InputStreamReader(inputStream))
+        // 1. Open the CSV file from assets
+        context.assets.open("data.csv").use { inputStream ->
+            BufferedReader(InputStreamReader(inputStream)).use { reader ->
 
-        // Read the headers (first line)
-        val headers = reader.readLine().split(",")
+                // 2. Read and parse the header row containing column names
+                val columnNames = reader.readLine().split(",")
 
-        // Read each line of the CSV file
-        reader.useLines { lines ->
-            lines.forEach { line ->
-                val tokens = line.split(",")
-                if (tokens.size == headers.size) {
-                    // Create a map of headers to values for each row
-                    val userMap = headers.zip(tokens).toMap()
-                    userData.add(userMap)
+                // 3. Process each subsequent data row
+                reader.forEachLine { csvRow ->
+                    // Split row into individual values
+                    val rowValues = csvRow.split(",")
+
+                    // Verify the row has the expected number of columns
+                    if (rowValues.size == columnNames.size) {
+                        // 4. Create key-value pairs by combining column names with row values
+                        val fieldValuePairs = columnNames.zip(rowValues)
+
+                        // 5. Convert pairs to a map and add to results
+                        val userRecord = fieldValuePairs.toMap()
+                        userRecords.add(userRecord)
+                    } else {
+                        // Log mismatch but continue processing
+                        println("Skipping malformed row. Expected ${columnNames.size} columns, found ${rowValues.size}")
+                    }
                 }
             }
         }
     } catch (e: Exception) {
-        // Handle any exceptions that might occur during file reading
+        // Handle file access or parsing errors
+        println("Error loading nutrition data: ${e.message}")
         e.printStackTrace()
     }
-    return userData
+
+    return userRecords
 }

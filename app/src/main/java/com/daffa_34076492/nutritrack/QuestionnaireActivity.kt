@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.app.Activity
 import android.app.TimePickerDialog
 import android.content.Context
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -25,13 +26,16 @@ import androidx.compose.ui.unit.sp
 import com.daffa_34076492.nutritrack.ui.theme.NutriTrack_Daffa_34076492Theme
 import java.util.*
 import androidx.core.content.edit
+import kotlin.jvm.java
 
 class QuestionnaireActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Retrieve userId from Intent
+        val userId = intent.getStringExtra("userId") ?: ""
         setContent {
             NutriTrack_Daffa_34076492Theme {
-                QuestionnaireScreen()
+                QuestionnaireScreen(userId)
             }
         }
     }
@@ -39,15 +43,19 @@ class QuestionnaireActivity : ComponentActivity() {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun QuestionnaireScreen() {
-    val mContext = LocalContext.current
-    val sharedPref = mContext.getSharedPreferences("Questionnaire", Context.MODE_PRIVATE)
+fun QuestionnaireScreen(userId: String) {
+    val context = LocalContext.current
+    val sharedPref = context.getSharedPreferences("Questionnaire", Context.MODE_PRIVATE)
 
     // Load previously saved values
     val savedTime = sharedPref.getString("selected_time", "No time selected") ?: "No time selected"
     val savedText = sharedPref.getString("user_text", "") ?: ""
     val savedCheckBox = sharedPref.getBoolean("checkbox_state", false)
     val savedPersona = sharedPref.getString("selected_persona", "") ?: ""
+    val savedBiggestMeal = sharedPref.getString("biggest_meal_time", "00:00") ?: "00:00"
+    val savedSleepTime = sharedPref.getString("sleep_time", "00:00") ?: "00:00"
+    val savedWakeTime = sharedPref.getString("wake_up_time", "00:00") ?: "00:00"
+
     val foodCategories = listOf("Fruits", "Vegetables", "Grains", "Red Meat", "Seafood", "Poultry", "Fish", "Eggs", "Nuts/Seeds")
     val initialFoodCategories = remember {
         foodCategories.associateWith { category ->
@@ -61,16 +69,16 @@ fun QuestionnaireScreen() {
     var checkBoxState by remember { mutableStateOf(savedCheckBox) }
     var selectedPersona by remember { mutableStateOf(savedPersona) }
     var foodCategoriesState by remember { mutableStateOf(initialFoodCategories) }
-    var biggestMealTime by remember { mutableStateOf("00:00") }
-    var sleepTime by remember { mutableStateOf("00:00") }
-    var wakeUpTime by remember { mutableStateOf("00:00") }
+    var biggestMealTime by remember { mutableStateOf(savedBiggestMeal) }
+    var sleepTime by remember { mutableStateOf(savedSleepTime) }
+    var wakeUpTime by remember { mutableStateOf(savedWakeTime) }
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text("Food Intake Questionnaire") },
                 navigationIcon = {
-                    IconButton(onClick = { (mContext as? Activity)?.finish() }) {
+                    IconButton(onClick = { (context as? Activity)?.finish() }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 }
@@ -108,6 +116,7 @@ fun QuestionnaireScreen() {
                 // Save Button
                 Button(
                     onClick = {
+                        // Save to SharedPreferences
                         sharedPref.edit {
                             putString("selected_time", mTime.value)
                             putString("user_text", mTextFieldValue.value)
@@ -120,6 +129,16 @@ fun QuestionnaireScreen() {
                             putString("sleep_time", sleepTime)
                             putString("wake_up_time", wakeUpTime)
                         }
+                        // Prepare the Intent to pass to HomeActivity
+                        val intent = Intent(context, HomeActivity::class.java).apply {
+                            putExtra("userId", userId)
+
+                            // Add food categories if necessary
+                            foodCategoriesState.forEach { (category, checked) ->
+                                putExtra(category, checked)
+                            }
+                        }
+                        context.startActivity(intent)
                     },
                     modifier = Modifier
                         .fillMaxWidth()
@@ -380,7 +399,7 @@ fun PersonaDropdown(
 
     Text(
         text = "Which Persona best fits you?",
-        fontSize = 14.sp,
+        fontSize = 18.sp,
         fontWeight = FontWeight.Bold,
     )
 
