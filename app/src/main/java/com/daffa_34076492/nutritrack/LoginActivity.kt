@@ -22,6 +22,7 @@ import androidx.compose.ui.unit.sp
 import com.daffa_34076492.nutritrack.ui.theme.NutriTrack_Daffa_34076492Theme
 import java.io.BufferedReader
 import java.io.InputStreamReader
+import androidx.core.content.edit
 
 
 class LoginActivity : ComponentActivity() {
@@ -51,9 +52,11 @@ fun LoginScreen() {
     var errorMessage by remember { mutableStateOf("") }
     var expanded by remember { mutableStateOf(false) }
 
-    // Load CSV data
-    val userData = loadCSVData(context)
-    val userIds = userData.map { it["User_ID"] ?: "" }.distinct()
+    // Load user IDs and phone numbers for dropdown
+    val userIdPhonePairs by remember {
+        derivedStateOf { loadUserIdsWithPhoneNumbers(context) }
+    }
+    val userIds = userIdPhonePairs.map { it.first }.distinct()
 
     Box(
         modifier = Modifier
@@ -169,28 +172,23 @@ fun LoginScreen() {
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // Continue Button
             Button(
                 onClick = {
-                    // Validate credentials
-                    val isValid = userData.any {
-                        it["User_ID"] == userId && it["PhoneNumber"] == phoneNumber
-                    }
-                    if (isValid) {
-                        // Pass userId to QuestionnaireActivity using Intent
-                        val intent = Intent(context, QuestionnaireActivity::class.java).apply {
-                            putExtra("userId", userId) // Pass the actual userId
+                    val user = findUser(context, userId, phoneNumber)
+                    if (user != null) {
+                        // Save userId in SharedPreferences within "Questionnaire.xml"
+                        val sharedPref = context.getSharedPreferences("Questionnaire", Context.MODE_PRIVATE)
+                        sharedPref.edit{
+                            putString("userId", userId)
                         }
+                        val intent = Intent(context, QuestionnaireActivity::class.java).apply {}
                         context.startActivity(intent)
                     } else {
+
                         errorMessage = "Invalid User ID or Phone Number"
                     }
                 },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(56.dp),
-                shape = RoundedCornerShape(16.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                modifier = Modifier.fillMaxWidth()
             ) {
                 Text(
                     text = "Continue",
@@ -211,47 +209,79 @@ fun LoginScreen() {
     }
 }
 
+
 /**
- * Loads and parses user nutrition data from a CSV file in the assets folder.
- * @param context Android context to access assets
- * @return List of user records, where each record is a map of field names to values
+ * Loads only User_ID and PhoneNumber pairs from CSV for dropdown population.
+ * This is more efficient than loading all data since we only need these two fields.
+ *
+ * @param context Android context for accessing assets
+ * @return List of pairs where first is User_ID and second is PhoneNumber
  */
-fun loadCSVData(context: Context): List<Map<String, String>> {
-    val userRecords = mutableListOf<Map<String, String>>()
+fun loadUserIdsWithPhoneNumbers(context: Context): List<Pair<String, String>> {
+    // Create a mutable list to store the ID-Phone pairs
+    val userPairs = mutableListOf<Pair<String, String>>()
 
     try {
-        // 1. Open the CSV file from assets
+        // Open the CSV file from assets
         context.assets.open("data.csv").use { inputStream ->
             BufferedReader(InputStreamReader(inputStream)).use { reader ->
+                // Read the header row to get column positions
+                val columns = reader.readLine().split(",")
 
-                // 2. Read and parse the header row containing column names
-                val columnNames = reader.readLine().split(",")
+                // Find the index of our target columns
+                val phoneIndex = columns.indexOf("PhoneNumber")
+                val idIndex = columns.indexOf("User_ID")
 
-                // 3. Process each subsequent data row
-                reader.forEachLine { csvRow ->
-                    // Split row into individual values
-                    val rowValues = csvRow.split(",")
-
-                    // Verify the row has the expected number of columns
-                    if (rowValues.size == columnNames.size) {
-                        // 4. Create key-value pairs by combining column names with row values
-                        val fieldValuePairs = columnNames.zip(rowValues)
-
-                        // 5. Convert pairs to a map and add to results
-                        val userRecord = fieldValuePairs.toMap()
-                        userRecords.add(userRecord)
-                    } else {
-                        // Log mismatch but continue processing
-                        println("Skipping malformed row. Expected ${columnNames.size} columns, found ${rowValues.size}")
+                // Read each subsequent line
+                reader.forEachLine { line ->
+                    val values = line.split(",")
+                    // Ensure we have enough columns before accessing
+                    if (values.size > maxOf(phoneIndex, idIndex)) {
+                        // Add the ID-Phone pair to our list
+                        userPairs.add(values[idIndex] to values[phoneIndex])
                     }
                 }
             }
         }
     } catch (e: Exception) {
-        // Handle file access or parsing errors
-        println("Error loading nutrition data: ${e.message}")
-        e.printStackTrace()
+        // Log errors but return what we have (fail gracefully)
+        println("Error loading user IDs: ${e.message}")
     }
 
-    return userRecords
+    // Return distinct pairs to avoid duplicates
+    return userPairs.distinct()
+}
+
+
+/**
+ * Finds a specific user by both User_ID AND PhoneNumber.
+ * Returns the user's record if found, null otherwise.
+ */
+fun findUser(context: Context, userId: String, phoneNumber: String): Map<String, String>? {
+    try {
+        context.assets.open("data.csv").use { inputStream ->
+            BufferedReader(InputStreamReader(inputStream)).use { reader ->
+                val columns = reader.readLine().split(",")
+
+                // Use traditional while loop instead of forEachLine
+                // to allow early return with found record
+                var line: String?
+                while (reader.readLine().also { line = it } != null) {
+                    line?.let { currentLine ->
+                        val values = currentLine.split(",")
+                        if (values.size == columns.size) {
+                            val record = columns.zip(values).toMap()
+                            if (record["User_ID"] == userId &&
+                                record["PhoneNumber"] == phoneNumber) {
+                                return record
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    } catch (e: Exception) {
+        println("Error finding user: ${e.message}")
+    }
+    return null
 }

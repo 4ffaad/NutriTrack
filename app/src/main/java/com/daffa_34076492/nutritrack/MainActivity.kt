@@ -20,9 +20,9 @@ class MainActivity : ComponentActivity() {
                     color = MaterialTheme.colorScheme.background
                 ) {
                     // Launch WelcomeActivity
-                    val intent = Intent(this, HomeActivity::class.java)
+                    val intent = Intent(this, WelcomeActivity::class.java)
                     startActivity(intent)
-                    finish() // Close MainActivity
+                    finish()
                 }
             }
         }
