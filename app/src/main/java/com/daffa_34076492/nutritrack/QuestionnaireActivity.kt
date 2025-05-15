@@ -1,11 +1,11 @@
 package com.daffa_34076492.nutritrack
 
-import android.annotation.SuppressLint
 import android.app.Activity
 import android.app.TimePickerDialog
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.Image
@@ -25,52 +25,93 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.daffa_34076492.nutritrack.ui.theme.NutriTrack_Daffa_34076492Theme
 import java.util.*
-import androidx.core.content.edit
+import androidx.lifecycle.ViewModelProvider
+import com.daffa_34076492.nutritrack.ViewModels.FoodIntakeViewModel
+import com.daffa_34076492.nutritrack.auth.AuthManager
+import com.daffa_34076492.nutritrack.data.model.FoodIntake
+
 import kotlin.jvm.java
 
-// Main activity that hosts the questionnaire screen
 class QuestionnaireActivity : ComponentActivity() {
+    private lateinit var viewModel: FoodIntakeViewModel
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        val factory = FoodIntakeViewModel.Factory(applicationContext)
+        viewModel = ViewModelProvider(this, factory)[FoodIntakeViewModel::class.java]
+
+        val userId = AuthManager.userId
+
         setContent {
             NutriTrack_Daffa_34076492Theme {
-                QuestionnaireScreen()
+                Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
+                    QuestionnaireScreen(innerPadding, viewModel, userId)
+                }
             }
         }
     }
 }
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun QuestionnaireScreen() {
+fun QuestionnaireScreen(
+    paddingValues: PaddingValues,
+    viewModel: FoodIntakeViewModel,
+    userId: Int
+) {
     val context = LocalContext.current
-    val sharedPref = context.getSharedPreferences("Questionnaire", Context.MODE_PRIVATE)
-    // Load saved preferences if available
-    val savedTime = sharedPref.getString("selected_time", "No time selected") ?: "No time selected"
-    val savedText = sharedPref.getString("user_text", "") ?: ""
-    val savedCheckBox = sharedPref.getBoolean("checkbox_state", false)
-    val savedPersona = sharedPref.getString("selected_persona", "") ?: ""
-    val savedBiggestMeal = sharedPref.getString("biggest_meal_time", "00:00") ?: "00:00"
-    val savedSleepTime = sharedPref.getString("sleep_time", "00:00") ?: "00:00"
-    val savedWakeTime = sharedPref.getString("wake_up_time", "00:00") ?: "00:00"
 
-    // Predefined food categories and their saved state
-    val foodCategories = listOf("Fruits", "Vegetables", "Grains", "Red Meat", "Seafood", "Poultry", "Fish", "Eggs", "Nuts/Seeds")
-    val initialFoodCategories = remember {
-        foodCategories.associateWith { category ->
-            sharedPref.getBoolean(category, false)
-        }
+    // Initializing state variables for form fields
+    var selectedPersona by remember { mutableStateOf("") }
+    var biggestMealTime by remember { mutableStateOf("") }
+    var sleepTime by remember { mutableStateOf("") }
+    var wakeUpTime by remember { mutableStateOf("") }
+
+    // Track food category selections
+    var foodCategoriesState by remember {
+        mutableStateOf(
+            mapOf(
+                "Fruits" to false,
+                "Vegetables" to false,
+                "Grains" to false,
+                "Red Meat" to false,
+                "Seafood" to false,
+                "Poultry" to false,
+                "Fish" to false,
+                "Eggs" to false,
+                "Nuts/Seeds" to false
+            )
+        )
     }
 
-    // UI state variables
-    val mTime = remember { mutableStateOf(savedTime) }
-    val mTextFieldValue = remember { mutableStateOf(savedText) }
-    var checkBoxState by remember { mutableStateOf(savedCheckBox) }
-    var selectedPersona by remember { mutableStateOf(savedPersona) }
-    var foodCategoriesState by remember { mutableStateOf(initialFoodCategories) }
-    var biggestMealTime by remember { mutableStateOf(savedBiggestMeal) }
-    var sleepTime by remember { mutableStateOf(savedSleepTime) }
-    var wakeUpTime by remember { mutableStateOf(savedWakeTime) }
+    // Trigger data load when the userId changes or when the screen is recomposed
+    LaunchedEffect(userId) {
+        viewModel.loadFoodIntake(userId)
+    }
+
+    // Collect the latest food intake data from the ViewModel
+    val foodIntake by viewModel.foodIntake.collectAsState(initial = null)
+
+    // Update UI values when food intake data is available
+    foodIntake?.let {
+        selectedPersona = it.persona
+        biggestMealTime = it.biggestMealTime
+        sleepTime = it.sleepTime
+        wakeUpTime = it.wakeUpTime
+
+        // Update food categories based on fetched data
+        foodCategoriesState = mapOf(
+            "Fruits" to it.eatsFruits,
+            "Vegetables" to it.eatsVegetables,
+            "Grains" to it.eatsGrains,
+            "Red Meat" to it.eatsRedMeat,
+            "Seafood" to it.eatsSeafood,
+            "Poultry" to it.eatsPoultry,
+            "Fish" to it.eatsFish,
+            "Eggs" to it.eatsEggs,
+            "Nuts/Seeds" to it.eatsNutsSeeds
+        )
+    }
 
     Scaffold(
         topBar = {
@@ -89,49 +130,68 @@ fun QuestionnaireScreen() {
                     .padding(paddingValues)
                     .padding(16.dp)
             ) {
-                // Food category selection
+                // Display the checkboxes for each food category
                 FoodCategoryCheckboxes(
-                    initialSelection = initialFoodCategories,
-                    onSelectionChanged = { categories ->
-                        foodCategoriesState = categories
+                    foodCategoriesState = foodCategoriesState,
+                    onCategoryChange = { category, isChecked ->
+                        foodCategoriesState = foodCategoriesState.toMutableMap().also {
+                            it[category] = isChecked
+                        }
                     }
                 )
-                // Buttons to display persona descriptions
                 PersonaModals()
-                // Dropdown to select one persona
+                // Persona selection dropdown
                 PersonaDropdown(
                     selectedPersona = selectedPersona,
-                    onPersonaSelected = { persona ->
-                        selectedPersona = persona
-                    }
+                    onPersonaSelected = { selectedPersona = it }
                 )
-                // Time pickers for meal/sleep/wake timings
+
+                // Date and Time inputs for meal times and sleep schedule
                 DateandTime(
                     biggestMealTime = biggestMealTime,
-                    sleepTime = sleepTime,
-                    wakeUpTime = wakeUpTime,
                     onBiggestMealTimeChange = { biggestMealTime = it },
+                    sleepTime = sleepTime,
                     onSleepTimeChange = { sleepTime = it },
+                    wakeUpTime = wakeUpTime,
                     onWakeUpTimeChange = { wakeUpTime = it }
                 )
 
-                // Save all questionnaire data
+                // Save button to store the form data
                 Button(
                     onClick = {
-                        sharedPref.edit {
-                            putString("selected_time", mTime.value)
-                            putString("user_text", mTextFieldValue.value)
-                            putBoolean("checkbox_state", checkBoxState)
-                            putString("selected_persona", selectedPersona)
-                            foodCategoriesState.forEach { (category, checked) ->
-                                putBoolean(category, checked)
-                            }
-                            putString("biggest_meal_time", biggestMealTime)
-                            putString("sleep_time", sleepTime)
-                            putString("wake_up_time", wakeUpTime)
+                        // Validate that all required fields are filled
+                        if (selectedPersona.isBlank() ||
+                            biggestMealTime.isBlank() ||
+                            sleepTime.isBlank() ||
+                            wakeUpTime.isBlank()
+                        ) {
+                            Toast.makeText(context, "Please fill all the required fields", Toast.LENGTH_SHORT).show()
+                            return@Button
                         }
-                        // Navigate to home after saving
-                        val intent = Intent(context, HomeActivity::class.java).apply{}
+
+                        // Create a FoodIntake object with the updated data
+                        val updatedFoodIntake = FoodIntake(
+                            userId = userId,
+                            persona = selectedPersona,
+                            eatsFruits = foodCategoriesState["Fruits"] ?: false,
+                            eatsVegetables = foodCategoriesState["Vegetables"] ?: false,
+                            eatsGrains = foodCategoriesState["Grains"] ?: false,
+                            eatsRedMeat = foodCategoriesState["Red Meat"] ?: false,
+                            eatsSeafood = foodCategoriesState["Seafood"] ?: false,
+                            eatsPoultry = foodCategoriesState["Poultry"] ?: false,
+                            eatsFish = foodCategoriesState["Fish"] ?: false,
+                            eatsEggs = foodCategoriesState["Eggs"] ?: false,
+                            eatsNutsSeeds = foodCategoriesState["Nuts/Seeds"] ?: false,
+                            biggestMealTime = biggestMealTime,
+                            sleepTime = sleepTime,
+                            wakeUpTime = wakeUpTime
+                        )
+
+                        // Save the updated food intake data using the ViewModel
+                        viewModel.saveFoodIntake(updatedFoodIntake)
+
+                        // Navigate back to the HomeActivity after saving
+                        val intent = Intent(context, HomeActivity::class.java)
                         context.startActivity(intent)
                     },
                     modifier = Modifier
@@ -145,21 +205,15 @@ fun QuestionnaireScreen() {
     )
 }
 
-// Checkbox grid layout for selecting dietary preferences
+
+
+
 @Composable
 fun FoodCategoryCheckboxes(
-    initialSelection: Map<String, Boolean>,
-    onSelectionChanged: (Map<String, Boolean>) -> Unit
+    foodCategoriesState: Map<String, Boolean>,
+    onCategoryChange: (String, Boolean) -> Unit
 ) {
-    val foodCategories = listOf(
-        "Fruits", "Vegetables", "Grains",
-        "Red Meat", "Seafood", "Poultry",
-        "Fish", "Eggs", "Nuts/Seeds"
-    )
-
-    val checkBoxStates = remember { mutableStateMapOf<String, Boolean>().apply {
-        putAll(initialSelection)
-    }}
+    val foodCategories = foodCategoriesState.keys.toList()
 
     Column {
         Text(
@@ -168,10 +222,7 @@ fun FoodCategoryCheckboxes(
             fontWeight = FontWeight.Bold,
         )
 
-        // Display in 3-column grid
-        Column(
-            modifier = Modifier.fillMaxWidth(),
-        ) {
+        Column(modifier = Modifier.fillMaxWidth()) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceEvenly
@@ -182,18 +233,13 @@ fun FoodCategoryCheckboxes(
                 }
 
                 columns.forEach { columnItems ->
-                    Column(
-                        modifier = Modifier.weight(1f)
-                    ) {
+                    Column(modifier = Modifier.weight(1f)) {
                         columnItems.forEach { category ->
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
                                 Checkbox(
-                                    checked = checkBoxStates[category] == true,
+                                    checked = foodCategoriesState[category] == true,
                                     onCheckedChange = { isChecked ->
-                                        checkBoxStates[category] = isChecked
-                                        onSelectionChanged(checkBoxStates.toMap())
+                                        onCategoryChange(category, isChecked)
                                     }
                                 )
                                 Text(
@@ -207,8 +253,9 @@ fun FoodCategoryCheckboxes(
                 }
             }
         }
+
+        Spacer(Modifier.height(10.dp))
     }
-    Spacer(Modifier.height(10.dp))
 }
 
 // Displays modal dialogs for each persona description
@@ -244,21 +291,27 @@ fun PersonaModals() {
             ) {
                 Button(
                     onClick = { showHealthDevotee = true },
-                    modifier = Modifier.weight(1f).height(50.dp),
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(50.dp),
                     shape = RoundedCornerShape(10.dp)
                 ) {
                     Text("Health Devotee", fontSize = 10.sp)
                 }
                 Button(
                     onClick = { showMindfulEater = true },
-                    modifier = Modifier.weight(1f).height(50.dp),
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(50.dp),
                     shape = RoundedCornerShape(10.dp)
                 ) {
                     Text("Mindful Eater", fontSize = 10.sp)
                 }
                 Button(
                     onClick = { showWellnessStriver = true },
-                    modifier = Modifier.weight(1f).height(50.dp),
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(50.dp),
                     shape = RoundedCornerShape(10.dp)
                 ) {
                     Text("Wellness Striver", fontSize = 10.sp)
@@ -271,21 +324,27 @@ fun PersonaModals() {
             ) {
                 Button(
                     onClick = { showBalanceSeeker = true },
-                    modifier = Modifier.weight(1f).height(50.dp),
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(50.dp),
                     shape = RoundedCornerShape(8.dp)
                 ) {
                     Text("Balance Seeker", fontSize = 10.sp)
                 }
                 Button(
                     onClick = { showHealthProcrastinator = true },
-                    modifier = Modifier.weight(1f).height(50.dp),
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(50.dp),
                     shape = RoundedCornerShape(8.dp),
                 ) {
                     Text("Health Procrastinator", fontSize = 10.sp)
                 }
                 Button(
                     onClick = { showFoodCarefree = true },
-                    modifier = Modifier.weight(1f).height(50.dp),
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(50.dp),
                     shape = RoundedCornerShape(8.dp)
                 ) {
                     Text("Food Carefree", fontSize = 10.sp)
@@ -376,7 +435,6 @@ fun PersonaDialog(title: String, description: String, imageRes: Int, onDismiss: 
     )
 }
 
-// Dropdown menu for selecting a user persona
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PersonaDropdown(
@@ -384,68 +442,60 @@ fun PersonaDropdown(
     onPersonaSelected: (String) -> Unit
 ) {
     val personas = listOf(
-        "Health Devotee",
-        "Mindful Eater",
-        "Wellness Striver",
-        "Balance Seeker",
-        "Health Procrastinator",
-        "Food Carefree"
+        "Health Devotee", "Mindful Eater", "Wellness Striver",
+        "Balance Seeker", "Health Procrastinator", "Food Carefree"
     )
 
     var expanded by remember { mutableStateOf(false) }
 
-    Text(
-        text = "Which Persona best fits you?",
-        fontSize = 18.sp,
-        fontWeight = FontWeight.Bold,
-    )
+    Column {
+        Text(text = "Select your persona", fontWeight = FontWeight.Bold)
 
-    ExposedDropdownMenuBox(
-        expanded = expanded,
-        onExpandedChange = { expanded = it }
-    ) {
-        TextField(
-            value = if (selectedPersona.isEmpty()) "Select a persona" else selectedPersona,
-            onValueChange = { },
-            readOnly = true,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 1.dp)
-                .menuAnchor(),
-            colors = OutlinedTextFieldDefaults.colors(
-                unfocusedBorderColor = MaterialTheme.colorScheme.outline,
-                focusedBorderColor = MaterialTheme.colorScheme.primary
-            ),
-            trailingIcon = {
-                ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded)
-            }
-        )
-
-        ExposedDropdownMenu(
+        ExposedDropdownMenuBox(
             expanded = expanded,
-            onDismissRequest = { expanded = false }
+            onExpandedChange = { expanded = !expanded }
         ) {
-            personas.forEach { persona ->
-                DropdownMenuItem(
-                    text = { Text(persona) },
-                    onClick = {
-                        onPersonaSelected(persona)
-                        expanded = false
-                    }
-                )
+            OutlinedTextField(
+                value = selectedPersona,
+                onValueChange = {}, // No manual typing, dropdown-only
+                readOnly = true,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .menuAnchor(),
+                label = { Text("Persona") },
+                trailingIcon = {
+                    ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded)
+                },
+                colors = OutlinedTextFieldDefaults.colors()
+            )
+
+            ExposedDropdownMenu(
+                expanded = expanded,
+                onDismissRequest = { expanded = false }
+            ) {
+                personas.forEach { persona ->
+                    DropdownMenuItem(
+                        text = { Text(persona) },
+                        onClick = {
+                            expanded = false
+                            onPersonaSelected(persona)
+                        }
+                    )
+                }
             }
         }
     }
 }
 
-// Displays time pickers for biggest meal, sleep, and wake-up time
+
+
 @Composable
 fun DateandTime(
     biggestMealTime: String,
-    sleepTime: String,
-    wakeUpTime: String,
     onBiggestMealTimeChange: (String) -> Unit,
+    sleepTime: String,
     onSleepTimeChange: (String) -> Unit,
+    wakeUpTime: String,
     onWakeUpTimeChange: (String) -> Unit
 ) {
     val context = LocalContext.current
@@ -458,84 +508,76 @@ fun DateandTime(
             modifier = Modifier.padding(bottom = 8.dp)
         )
 
-        // Biggest meal time
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(bottom = 8.dp)
-        ) {
-            Text(
-                text = "What time of day approx. do you normally eat your biggest meal?",
-                modifier = Modifier.weight(1f)
-            )
-            Button(
-                onClick = {
-                    showTimePicker(context) { newTime ->
-                        onBiggestMealTimeChange(newTime)
-                    }
-                },
-                modifier = Modifier.width(100.dp)
-            ) {
-                Text(text = biggestMealTime)
-            }
-        }
+        TimeRow(
+            label = "What time of day approx. do you normally eat your biggest meal?",
+            timeValue = biggestMealTime,
+            onTimeSelected = onBiggestMealTimeChange,
+            context = context
+        )
 
-        // Sleep time
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(bottom = 8.dp)
-        ) {
-            Text(
-                text = "What time of day approx. do you go to sleep at night?",
-                modifier = Modifier.weight(1f)
-            )
-            Button(
-                onClick = {
-                    showTimePicker(context) { newTime ->
-                        onSleepTimeChange(newTime)
-                    }
-                },
-                modifier = Modifier.width(100.dp)
-            ) {
-                Text(text = sleepTime)
-            }
-        }
+        TimeRow(
+            label = "What time of day approx. do you go to sleep at night?",
+            timeValue = sleepTime,
+            onTimeSelected = onSleepTimeChange,
+            context = context
+        )
 
-        // Wake up time
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(bottom = 8.dp)
+        TimeRow(
+            label = "What time of day approx. do you wake up in the morning?",
+            timeValue = wakeUpTime,
+            onTimeSelected = onWakeUpTimeChange,
+            context = context
+        )
+    }
+}
+
+
+@Composable
+fun TimeRow(
+    label: String,
+    timeValue: String,
+    onTimeSelected: (String) -> Unit,
+    context: Context
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.padding(bottom = 8.dp)
+    ) {
+        Text(
+            text = label,
+            modifier = Modifier.weight(1f)
+        )
+        Button(
+            onClick = {
+                showTimePicker(context, onTimeSelected)
+            },
+            modifier = Modifier.width(100.dp)
         ) {
-            Text(
-                text = "What time of day approx. do you wake up in the morning?",
-                modifier = Modifier.weight(1f)
-            )
-            Button(
-                onClick = {
-                    showTimePicker(context) { newTime ->
-                        onWakeUpTimeChange(newTime)
-                    }
-                },
-                modifier = Modifier.width(100.dp)
-            ) {
-                Text(text = wakeUpTime)
-            }
+            Text(if (timeValue.isBlank()) "00:00" else timeValue)
         }
     }
 }
 
-// Opens a TimePickerDialog and returns the selected time in HH:mm format
-@SuppressLint("DefaultLocale")
+
 fun showTimePicker(context: Context, onTimeSelected: (String) -> Unit) {
-    val mCalendar = Calendar.getInstance()
-    val mHour = mCalendar.get(Calendar.HOUR_OF_DAY)
-    val mMinute = mCalendar.get(Calendar.MINUTE)
+    // Create a TimePickerDialog instance
+    val calendar = Calendar.getInstance()
+    val hour = calendar.get(Calendar.HOUR_OF_DAY)
+    val minute = calendar.get(Calendar.MINUTE)
 
-    TimePickerDialog(
+    val timePickerDialog = TimePickerDialog(
         context,
-        { _, hourOfDay, minute ->
-            onTimeSelected(String.format("%02d:%02d", hourOfDay, minute))
+        { _, selectedHour, selectedMinute ->
+            // Format the selected time as "HH:mm"
+            val timeString = String.format("%02d:%02d", selectedHour, selectedMinute)
+            // Pass the formatted time string to the onTimeSelected callback
+            onTimeSelected(timeString)
         },
-        mHour, mMinute, true
-    ).show()
-}
+        hour, // default hour
+        minute, // default minute
+        true // 24-hour format
+    )
 
+    // Show the time picker dialog
+    timePickerDialog.show()
+}

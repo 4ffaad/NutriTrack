@@ -1,6 +1,6 @@
 package com.daffa_34076492.nutritrack
 
-import android.content.Context
+import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -14,49 +14,50 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.daffa_34076492.nutritrack.ui.theme.NutriTrack_Daffa_34076492Theme
-import java.io.BufferedReader
-import java.io.InputStreamReader
-import androidx.core.content.edit
-
+import androidx.lifecycle.ViewModelProvider
+import androidx.compose.runtime.livedata.observeAsState
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.platform.LocalContext
+import com.daffa_34076492.nutritrack.ViewModels.PatientViewModel
+import com.daffa_34076492.nutritrack.auth.AuthManager
 
 class LoginActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+
         setContent {
             NutriTrack_Daffa_34076492Theme {
-                // Acts as a container that fills the available space and applies a background color
-                Surface(
-                    modifier = Modifier.fillMaxSize(),
-                    color = MaterialTheme.colorScheme.background
-                ) {
-                    LoginScreen()
+                val viewModel: PatientViewModel = ViewModelProvider(
+                    this,
+                    PatientViewModel.PatientViewModelFactory(this@LoginActivity)
+                )[PatientViewModel::class.java]
+
+                Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
+                    LoginScreen(innerPadding, viewModel)
                 }
             }
         }
     }
 }
 
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun LoginScreen() {
-    val context = LocalContext.current
-    var userId by remember { mutableStateOf("") }
-    var phoneNumber by remember { mutableStateOf("") }
-    var errorMessage by remember { mutableStateOf("") }
+fun LoginScreen(paddingValues: PaddingValues, patientViewModel: PatientViewModel) {
+    var userId by rememberSaveable { mutableStateOf("") }
+    var password by rememberSaveable { mutableStateOf("") }
+    var errorMessage by rememberSaveable { mutableStateOf("") }
     var expanded by remember { mutableStateOf(false) }
+    val userIds by patientViewModel.userIds.observeAsState(emptyList())
+    val context = LocalContext.current
 
-    // Load user IDs and phone numbers for dropdown
-    val userIdPhonePairs by remember {
-        derivedStateOf { loadUserIdsWithPhoneNumbers(context) }
-    }
-    val userIds = userIdPhonePairs.map { it.first }.distinct()
+
 
     Box(
         modifier = Modifier
@@ -116,30 +117,31 @@ fun LoginScreen() {
                 ) {
                     userIds.forEach { id ->
                         DropdownMenuItem(
-                            text = { Text(id) },
+                            text = { Text(id.toString()) },
                             onClick = {
-                                userId = id
+                                userId = id.toString()
                                 expanded = false
                             }
                         )
                     }
                 }
+
+
             }
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Phone Number Field
             Text(
-                text = "Phone number",
+                text = "Password",
                 fontSize = 16.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.align(Alignment.Start)
             )
 
             OutlinedTextField(
-                value = phoneNumber,
-                onValueChange = { phoneNumber = it },
-                placeholder = { Text("Enter your number", color = Color.LightGray) },
+                value = password,
+                onValueChange = { password = it },
+                placeholder = { Text("Enter your password", color = Color.LightGray) },
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(vertical = 8.dp),
@@ -174,24 +176,51 @@ fun LoginScreen() {
 
             Button(
                 onClick = {
-                    val user = findUser(context, userId, phoneNumber)
-                    if (user != null) {
-                        // Save userId in SharedPreferences within "Questionnaire.xml"
-                        val sharedPref = context.getSharedPreferences("Questionnaire", Context.MODE_PRIVATE)
-                        sharedPref.edit{
-                            putString("userId", userId)
-                        }
-                        val intent = Intent(context, QuestionnaireActivity::class.java).apply {}
-                        context.startActivity(intent)
-                    } else {
+                    val idInt = userId.toIntOrNull()
+                    if (idInt != null) {
+                        patientViewModel.verifyLogin(idInt, password) { success ->
+                            if (success) {
+                                errorMessage = ""
 
-                        errorMessage = "Invalid User ID or Phone Number"
+                                AuthManager.login(idInt)
+
+                                val intent = Intent(context, QuestionnaireActivity::class.java)
+                                context.startActivity(intent)
+
+                                if (context is Activity) {
+                                    context.finish()
+                                }
+                            } else {
+                                errorMessage = "Invalid user ID or password"
+                            }
+                        }
+                    } else {
+                        errorMessage = "Please select a valid user ID."
                     }
                 },
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text(
-                    text = "Continue",
+                    text = "Sign-up",
+                    fontSize = 16.sp,
+                    color = MaterialTheme.colorScheme.onPrimary
+                )
+            }
+
+
+
+            Button(
+                onClick = {
+                    val intent = Intent(context, RegisterActivity::class.java)
+                    context.startActivity(intent)
+                    if (context is Activity) {
+                        context.finish()
+                    }
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    text = "Register",
                     fontSize = 16.sp,
                     color = MaterialTheme.colorScheme.onPrimary
                 )
@@ -207,81 +236,4 @@ fun LoginScreen() {
             )
         }
     }
-}
-
-
-/**
- * Loads only User_ID and PhoneNumber pairs from CSV for dropdown population.
- * This is more efficient than loading all data since we only need these two fields.
- *
- * @param context Android context for accessing assets
- * @return List of pairs where first is User_ID and second is PhoneNumber
- */
-fun loadUserIdsWithPhoneNumbers(context: Context): List<Pair<String, String>> {
-    // Create a mutable list to store the ID-Phone pairs
-    val userPairs = mutableListOf<Pair<String, String>>()
-
-    try {
-        // Open the CSV file from assets
-        context.assets.open("data.csv").use { inputStream ->
-            BufferedReader(InputStreamReader(inputStream)).use { reader ->
-                // Read the header row to get column positions
-                val columns = reader.readLine().split(",")
-
-                // Find the index of our target columns
-                val phoneIndex = columns.indexOf("PhoneNumber")
-                val idIndex = columns.indexOf("User_ID")
-
-                // Read each subsequent line
-                reader.forEachLine { line ->
-                    val values = line.split(",")
-                    // Ensure we have enough columns before accessing
-                    if (values.size > maxOf(phoneIndex, idIndex)) {
-                        // Add the ID-Phone pair to our list
-                        userPairs.add(values[idIndex] to values[phoneIndex])
-                    }
-                }
-            }
-        }
-    } catch (e: Exception) {
-        // Log errors but return what we have (fail gracefully)
-        println("Error loading user IDs: ${e.message}")
-    }
-
-    // Return distinct pairs to avoid duplicates
-    return userPairs.distinct()
-}
-
-
-/**
- * Finds a specific user by both User_ID AND PhoneNumber.
- * Returns the user's record if found, null otherwise.
- */
-fun findUser(context: Context, userId: String, phoneNumber: String): Map<String, String>? {
-    try {
-        context.assets.open("data.csv").use { inputStream ->
-            BufferedReader(InputStreamReader(inputStream)).use { reader ->
-                val columns = reader.readLine().split(",")
-
-                // Use traditional while loop instead of forEachLine
-                // to allow early return with found record
-                var line: String?
-                while (reader.readLine().also { line = it } != null) {
-                    line?.let { currentLine ->
-                        val values = currentLine.split(",")
-                        if (values.size == columns.size) {
-                            val record = columns.zip(values).toMap()
-                            if (record["User_ID"] == userId &&
-                                record["PhoneNumber"] == phoneNumber) {
-                                return record
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    } catch (e: Exception) {
-        println("Error finding user: ${e.message}")
-    }
-    return null
 }

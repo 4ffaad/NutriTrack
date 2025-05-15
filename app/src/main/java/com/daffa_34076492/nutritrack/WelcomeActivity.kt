@@ -1,5 +1,4 @@
 package com.daffa_34076492.nutritrack
-
 import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -21,6 +20,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.net.toUri
 import com.daffa_34076492.nutritrack.ui.theme.NutriTrack_Daffa_34076492Theme
+
 
 class WelcomeActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
