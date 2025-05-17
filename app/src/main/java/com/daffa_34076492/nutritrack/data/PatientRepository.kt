@@ -12,11 +12,6 @@ class PatientRepository(private val context: Context) {
     private val patientDao = AppDatabase.getDatabase(context).patientDao()
 
 
-    // Updates the password for the given user ID and returns number of rows affected
-    suspend fun updatePassword(userId: Int, password: String): Int {
-        return patientDao.updatePassword(userId, password)
-    }
-
     // Returns the total number of patients in the database
     suspend fun getPatientCount(): Int {
         return patientDao.getPatientCount()
@@ -43,7 +38,7 @@ class PatientRepository(private val context: Context) {
     }
 
     // Handles the user registration by matching phone number and setting password
-    suspend fun registerUser(userId: Int, phone: String, password: String): Boolean {
+    suspend fun registerUser(userId: Int, phone: String, password: String, name: String): Boolean {
         val patient = patientDao.getPatientById(userId) ?: return false
 
         // Check phone number match
@@ -57,7 +52,7 @@ class PatientRepository(private val context: Context) {
         }
 
         // Update password (registration step)
-        return patientDao.updatePassword(userId, password) > 0
+        return patientDao.registerPassword(userId, password, name) > 0
     }
 
     // Loads all patient records from CSV and inserts them into the database (only called on first launch)
@@ -81,6 +76,8 @@ class PatientRepository(private val context: Context) {
                 userId = row[1].toInt(),
                 phoneNumber = row[0],
                 sex = sex,
+                password = "",
+                name = "",
                 HEIFATotalScore = pick(3, 4),
                 discretionaryHEIFAScore = pick(5, 6),
                 discretionaryServeSize = row[7].toDoubleOrNull() ?: 0.0,
@@ -127,12 +124,28 @@ class PatientRepository(private val context: Context) {
                 saturatedFat = row[59].toDoubleOrNull() ?: 0.0,
                 unsaturatedFatHEIFAScore = pick(60, 61),
                 unsaturatedFatServeSize = row[62].toDoubleOrNull() ?: 0.0,
-                password = "" // Initially empty; to be set during registration
             )
 
             patientDao.insert(patient)
         }
 
         reader.close()
+    }
+
+    suspend fun verifyUser(userId: Int, phoneNumber: String): Boolean {
+        return patientDao.verifyUserByIdAndPhone(userId, phoneNumber) > 0
+    }
+
+    suspend fun resetPassword(userId: Int, newPassword: String): Boolean {
+        return patientDao.updatePassword(userId, newPassword) > 0
+    }
+
+
+    suspend fun getHEIFAScore(userId: Int): Double? {
+        return patientDao.getHEIFAScore(userId)
+    }
+
+    suspend fun getFoodScoresByUserId(userId: Int): Patient? {
+        return patientDao.getFoodScoresByUserId(userId)
     }
 }

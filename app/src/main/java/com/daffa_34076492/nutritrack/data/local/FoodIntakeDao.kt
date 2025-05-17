@@ -16,4 +16,7 @@ interface FoodIntakeDao {
 
     @Query("SELECT * FROM food_intake WHERE userId = :userId LIMIT 1")
     suspend fun getFoodIntakeByUserId(userId: Int): FoodIntake?
+
+
+
 }

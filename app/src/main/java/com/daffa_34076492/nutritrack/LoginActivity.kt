@@ -7,8 +7,11 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.ClickableText
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -23,8 +26,17 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import com.daffa_34076492.nutritrack.ViewModels.PatientViewModel
 import com.daffa_34076492.nutritrack.auth.AuthManager
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.withStyle
+
 
 class LoginActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -56,39 +68,37 @@ fun LoginScreen(paddingValues: PaddingValues, patientViewModel: PatientViewModel
     var expanded by remember { mutableStateOf(false) }
     val userIds by patientViewModel.userIds.observeAsState(emptyList())
     val context = LocalContext.current
+    var passwordVisible by rememberSaveable { mutableStateOf(false) }
 
-
-
-    Box(
+    LazyColumn(
         modifier = Modifier
             .fillMaxSize()
-            .padding(top = 40.dp)
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 24.dp, vertical = 16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Spacer(modifier = Modifier.height(16.dp))
-
+            .padding(top = 64.dp, start = 24.dp, end = 24.dp, bottom = 16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+        contentPadding = PaddingValues(bottom = 32.dp)
+    )
+ {
+        item {
             Text(
                 text = "Log in",
                 fontSize = 24.sp,
                 fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.fillMaxWidth()
             )
+        }
 
-            Spacer(modifier = Modifier.height(24.dp))
-
-            // User ID Field
+        item {
             Text(
                 text = "My ID (Provided by your Clinician)",
                 fontSize = 16.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.align(Alignment.Start)
+                modifier = Modifier.fillMaxWidth()
             )
+        }
 
+        item {
             ExposedDropdownMenuBox(
                 expanded = expanded,
                 onExpandedChange = { expanded = !expanded }
@@ -99,7 +109,6 @@ fun LoginScreen(paddingValues: PaddingValues, patientViewModel: PatientViewModel
                     readOnly = true,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(vertical = 8.dp)
                         .menuAnchor(),
                     shape = RoundedCornerShape(16.dp),
                     colors = OutlinedTextFieldDefaults.colors(
@@ -125,55 +134,72 @@ fun LoginScreen(paddingValues: PaddingValues, patientViewModel: PatientViewModel
                         )
                     }
                 }
-
-
             }
+        }
 
-            Spacer(modifier = Modifier.height(16.dp))
-
+        item {
             Text(
                 text = "Password",
                 fontSize = 16.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.align(Alignment.Start)
+                modifier = Modifier.fillMaxWidth()
             )
+        }
 
+        item {
             OutlinedTextField(
                 value = password,
                 onValueChange = { password = it },
                 placeholder = { Text("Enter your password", color = Color.LightGray) },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 8.dp),
+                modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(16.dp),
                 colors = OutlinedTextFieldDefaults.colors(
                     unfocusedBorderColor = MaterialTheme.colorScheme.outline,
                     focusedBorderColor = MaterialTheme.colorScheme.primary
                 ),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone)
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                trailingIcon = {
+                    val icon = if (passwordVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility
+                    val description = if (passwordVisible) "Hide password" else "Show password"
+
+                    IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                        Icon(imageVector = icon, contentDescription = description)
+                    }
+                }
             )
+        }
 
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // Error Message
+        item {
             if (errorMessage.isNotEmpty()) {
                 Text(
                     text = errorMessage,
                     color = MaterialTheme.colorScheme.error,
                     fontSize = 14.sp,
-                    modifier = Modifier.padding(bottom = 8.dp)
+                    modifier = Modifier.fillMaxWidth()
                 )
             }
+        }
 
-            // Info Text
+        item {
             Text(
                 text = "This app is only for pre-registered users. Please have your ID and phone number handy before continuing.",
                 fontSize = 14.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.fillMaxWidth()
             )
+        }
+     item {
+         val context = LocalContext.current
+         ForgotPasswordText {
+             val intent = Intent(context, PasswordResetActivity::class.java)
+             context.startActivity(intent)
+         }
 
-            Spacer(modifier = Modifier.height(24.dp))
+     }
 
+
+        item {
             Button(
                 onClick = {
                     val idInt = userId.toIntOrNull()
@@ -181,7 +207,6 @@ fun LoginScreen(paddingValues: PaddingValues, patientViewModel: PatientViewModel
                         patientViewModel.verifyLogin(idInt, password) { success ->
                             if (success) {
                                 errorMessage = ""
-
                                 AuthManager.login(idInt)
 
                                 val intent = Intent(context, QuestionnaireActivity::class.java)
@@ -201,14 +226,14 @@ fun LoginScreen(paddingValues: PaddingValues, patientViewModel: PatientViewModel
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text(
-                    text = "Sign-up",
+                    text = "Log In",
                     fontSize = 16.sp,
                     color = MaterialTheme.colorScheme.onPrimary
                 )
             }
+        }
 
-
-
+        item {
             Button(
                 onClick = {
                     val intent = Intent(context, RegisterActivity::class.java)
@@ -225,11 +250,10 @@ fun LoginScreen(paddingValues: PaddingValues, patientViewModel: PatientViewModel
                     color = MaterialTheme.colorScheme.onPrimary
                 )
             }
+        }
 
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // Horizontal line at bottom
-            HorizontalDivider(
+        item {
+            Divider(
                 modifier = Modifier.fillMaxWidth(),
                 thickness = 1.dp,
                 color = MaterialTheme.colorScheme.surfaceVariant
@@ -237,3 +261,27 @@ fun LoginScreen(paddingValues: PaddingValues, patientViewModel: PatientViewModel
         }
     }
 }
+
+@Composable
+fun ForgotPasswordText(onClick: () -> Unit) {
+    val annotatedString = buildAnnotatedString {
+        append("Forgot your password? ")
+        pushStringAnnotation(tag = "RESET", annotation = "reset")
+        withStyle(style = SpanStyle(color = MaterialTheme.colorScheme.primary, textDecoration = TextDecoration.Underline)) {
+            append("Press here")
+        }
+        pop()
+    }
+
+    ClickableText(
+        text = annotatedString,
+        onClick = { offset ->
+            annotatedString.getStringAnnotations(tag = "RESET", start = offset, end = offset)
+                .firstOrNull()?.let { _ ->
+                    onClick()
+                }
+        },
+        style = MaterialTheme.typography.bodyMedium
+    )
+}
+

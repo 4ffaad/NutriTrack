@@ -10,6 +10,8 @@ data class Patient(
     @PrimaryKey
     val userId: Int = 0,
     val phoneNumber: String,
+    val password: String?,
+    val name: String,
     val sex: String,
     val HEIFATotalScore: Double,
     val discretionaryHEIFAScore: Double,
@@ -57,5 +59,4 @@ data class Patient(
     val saturatedFat: Double,
     val unsaturatedFatHEIFAScore: Double,
     val unsaturatedFatServeSize: Double,
-    val password: String?
 )

@@ -1,6 +1,5 @@
 package com.daffa_34076492.nutritrack.data.model
 
-import android.R
 import androidx.room.*
 import com.daffa_34076492.nutritrack.model.Patient
 

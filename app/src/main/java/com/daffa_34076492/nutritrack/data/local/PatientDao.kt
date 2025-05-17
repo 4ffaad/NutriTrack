@@ -40,9 +40,20 @@ interface PatientDao {
 
     // Updates a user's password during registration
     // Called once the phone number is verified and password is being set
+    @Query("UPDATE patient_table SET name = :name, password = :newPassword WHERE userId = :userId")
+    suspend fun registerPassword(userId: Int, newPassword: String, name: String): Int
+
+    @Query("SELECT COUNT(*) FROM patient_table WHERE userId = :userId AND phoneNumber = :phoneNumber")
+    suspend fun verifyUserByIdAndPhone(userId: Int, phoneNumber: String): Int
+
     @Query("UPDATE patient_table SET password = :newPassword WHERE userId = :userId")
     suspend fun updatePassword(userId: Int, newPassword: String): Int
 
+    @Query("SELECT HEIFATotalScore FROM patient_table WHERE userId = :userId LIMIT 1")
+    suspend fun getHEIFAScore(userId: Int): Double?
 
+
+    @Query("SELECT * FROM patient_table WHERE userId = :userId")
+    suspend fun getFoodScoresByUserId(userId: Int): Patient?
 
 }

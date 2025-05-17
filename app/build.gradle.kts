@@ -67,6 +67,7 @@ dependencies {
     kapt(libs.androidx.room.compiler)
     implementation(libs.androidx.room.ktx)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
+    implementation ("androidx.compose.material:material-icons-extended:1.6.1")
     implementation("com.opencsv:opencsv:5.6")
     implementation ("androidx.lifecycle:lifecycle-livedata-ktx:2.6.2")
     implementation ("androidx.lifecycle:lifecycle-viewmodel-ktx:2.6.2")

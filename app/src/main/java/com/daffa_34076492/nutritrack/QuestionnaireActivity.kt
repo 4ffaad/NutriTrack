@@ -1,5 +1,6 @@
 package com.daffa_34076492.nutritrack
 
+import android.annotation.SuppressLint
 import android.app.Activity
 import android.app.TimePickerDialog
 import android.content.Context
@@ -10,6 +11,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -28,7 +30,6 @@ import java.util.*
 import androidx.lifecycle.ViewModelProvider
 import com.daffa_34076492.nutritrack.ViewModels.FoodIntakeViewModel
 import com.daffa_34076492.nutritrack.auth.AuthManager
-import com.daffa_34076492.nutritrack.data.model.FoodIntake
 
 import kotlin.jvm.java
 
@@ -60,58 +61,13 @@ fun QuestionnaireScreen(
     userId: Int
 ) {
     val context = LocalContext.current
-
-    // Initializing state variables for form fields
-    var selectedPersona by remember { mutableStateOf("") }
-    var biggestMealTime by remember { mutableStateOf("") }
-    var sleepTime by remember { mutableStateOf("") }
-    var wakeUpTime by remember { mutableStateOf("") }
-
-    // Track food category selections
-    var foodCategoriesState by remember {
-        mutableStateOf(
-            mapOf(
-                "Fruits" to false,
-                "Vegetables" to false,
-                "Grains" to false,
-                "Red Meat" to false,
-                "Seafood" to false,
-                "Poultry" to false,
-                "Fish" to false,
-                "Eggs" to false,
-                "Nuts/Seeds" to false
-            )
-        )
-    }
-
-    // Trigger data load when the userId changes or when the screen is recomposed
+    // Load data on first composition
     LaunchedEffect(userId) {
         viewModel.loadFoodIntake(userId)
     }
 
-    // Collect the latest food intake data from the ViewModel
-    val foodIntake by viewModel.foodIntake.collectAsState(initial = null)
-
-    // Update UI values when food intake data is available
-    foodIntake?.let {
-        selectedPersona = it.persona
-        biggestMealTime = it.biggestMealTime
-        sleepTime = it.sleepTime
-        wakeUpTime = it.wakeUpTime
-
-        // Update food categories based on fetched data
-        foodCategoriesState = mapOf(
-            "Fruits" to it.eatsFruits,
-            "Vegetables" to it.eatsVegetables,
-            "Grains" to it.eatsGrains,
-            "Red Meat" to it.eatsRedMeat,
-            "Seafood" to it.eatsSeafood,
-            "Poultry" to it.eatsPoultry,
-            "Fish" to it.eatsFish,
-            "Eggs" to it.eatsEggs,
-            "Nuts/Seeds" to it.eatsNutsSeeds
-        )
-    }
+    // Observe the form state from ViewModel
+    val formState by viewModel.formState
 
     Scaffold(
         topBar = {
@@ -124,89 +80,79 @@ fun QuestionnaireScreen(
                 }
             )
         },
-        content = { paddingValues ->
-            Column(
+        content = { innerPadding ->
+            LazyColumn(
+                contentPadding = innerPadding,
                 modifier = Modifier
-                    .padding(paddingValues)
                     .padding(16.dp)
+                    .fillMaxSize(),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                // Display the checkboxes for each food category
-                FoodCategoryCheckboxes(
-                    foodCategoriesState = foodCategoriesState,
-                    onCategoryChange = { category, isChecked ->
-                        foodCategoriesState = foodCategoriesState.toMutableMap().also {
-                            it[category] = isChecked
+                item {
+                    FoodCategoryCheckboxes(
+                        foodCategoriesState = mapOf(
+                            "Fruits" to formState.eatsFruits,
+                            "Vegetables" to formState.eatsVegetables,
+                            "Grains" to formState.eatsGrains,
+                            "Red Meat" to formState.eatsRedMeat,
+                            "Seafood" to formState.eatsSeafood,
+                            "Poultry" to formState.eatsPoultry,
+                            "Fish" to formState.eatsFish,
+                            "Eggs" to formState.eatsEggs,
+                            "Nuts/Seeds" to formState.eatsNutsSeeds
+                        ),
+                        onCategoryChange = { category, isChecked ->
+                            viewModel.onFoodCategoryToggle(category, isChecked)
                         }
+                    )
+                }
+
+                item { PersonaModals() }
+
+                item {
+                    PersonaDropdown(
+                        selectedPersona = formState.persona,
+                        onPersonaSelected = { viewModel.onPersonaChange(it) }
+                    )
+                }
+
+                item {
+                    DateandTime(
+                        biggestMealTime = formState.biggestMealTime,
+                        onBiggestMealTimeChange = { viewModel.onTimeChange(biggestMeal = it) },
+                        sleepTime = formState.sleepTime,
+                        onSleepTimeChange = { viewModel.onTimeChange(sleep = it) },
+                        wakeUpTime = formState.wakeUpTime,
+                        onWakeUpTimeChange = { viewModel.onTimeChange(wakeUp = it) }
+                    )
+                }
+
+                item {
+                    Button(
+                        onClick = {
+                            if (formState.persona.isBlank() ||
+                                formState.biggestMealTime.isBlank() ||
+                                formState.sleepTime.isBlank() ||
+                                formState.wakeUpTime.isBlank()
+                            ) {
+                                Toast.makeText(context, "Please fill all the required fields", Toast.LENGTH_SHORT).show()
+                                return@Button
+                            }
+
+                            viewModel.saveCurrentForm(userId)
+
+                            context.startActivity(Intent(context, HomeActivity::class.java))
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                    ) {
+                        Text("Save")
                     }
-                )
-                PersonaModals()
-                // Persona selection dropdown
-                PersonaDropdown(
-                    selectedPersona = selectedPersona,
-                    onPersonaSelected = { selectedPersona = it }
-                )
-
-                // Date and Time inputs for meal times and sleep schedule
-                DateandTime(
-                    biggestMealTime = biggestMealTime,
-                    onBiggestMealTimeChange = { biggestMealTime = it },
-                    sleepTime = sleepTime,
-                    onSleepTimeChange = { sleepTime = it },
-                    wakeUpTime = wakeUpTime,
-                    onWakeUpTimeChange = { wakeUpTime = it }
-                )
-
-                // Save button to store the form data
-                Button(
-                    onClick = {
-                        // Validate that all required fields are filled
-                        if (selectedPersona.isBlank() ||
-                            biggestMealTime.isBlank() ||
-                            sleepTime.isBlank() ||
-                            wakeUpTime.isBlank()
-                        ) {
-                            Toast.makeText(context, "Please fill all the required fields", Toast.LENGTH_SHORT).show()
-                            return@Button
-                        }
-
-                        // Create a FoodIntake object with the updated data
-                        val updatedFoodIntake = FoodIntake(
-                            userId = userId,
-                            persona = selectedPersona,
-                            eatsFruits = foodCategoriesState["Fruits"] ?: false,
-                            eatsVegetables = foodCategoriesState["Vegetables"] ?: false,
-                            eatsGrains = foodCategoriesState["Grains"] ?: false,
-                            eatsRedMeat = foodCategoriesState["Red Meat"] ?: false,
-                            eatsSeafood = foodCategoriesState["Seafood"] ?: false,
-                            eatsPoultry = foodCategoriesState["Poultry"] ?: false,
-                            eatsFish = foodCategoriesState["Fish"] ?: false,
-                            eatsEggs = foodCategoriesState["Eggs"] ?: false,
-                            eatsNutsSeeds = foodCategoriesState["Nuts/Seeds"] ?: false,
-                            biggestMealTime = biggestMealTime,
-                            sleepTime = sleepTime,
-                            wakeUpTime = wakeUpTime
-                        )
-
-                        // Save the updated food intake data using the ViewModel
-                        viewModel.saveFoodIntake(updatedFoodIntake)
-
-                        // Navigate back to the HomeActivity after saving
-                        val intent = Intent(context, HomeActivity::class.java)
-                        context.startActivity(intent)
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 16.dp),
-                ) {
-                    Text(text = "Save")
                 }
             }
         }
     )
 }
-
-
-
 
 @Composable
 fun FoodCategoryCheckboxes(
@@ -559,6 +505,7 @@ fun TimeRow(
 }
 
 
+@SuppressLint("DefaultLocale")
 fun showTimePicker(context: Context, onTimeSelected: (String) -> Unit) {
     // Create a TimePickerDialog instance
     val calendar = Calendar.getInstance()

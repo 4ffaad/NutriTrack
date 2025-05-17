@@ -1,15 +1,26 @@
 package com.daffa_34076492.nutritrack
+import android.annotation.SuppressLint
 import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Logout
+import androidx.compose.material.icons.filled.AdminPanelSettings
+import androidx.compose.material.icons.filled.Badge
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Female
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Male
+import androidx.compose.material.icons.filled.MedicalServices
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
@@ -29,16 +40,33 @@ import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
-import java.io.BufferedReader
-import java.io.InputStreamReader
-import android.content.Context
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.lifecycle.ViewModelProvider
 import androidx.navigation.compose.currentBackStackEntryAsState
+import com.daffa_34076492.nutritrack.ViewModels.PatientViewModel
+import com.daffa_34076492.nutritrack.auth.AuthManager
 import com.daffa_34076492.nutritrack.ui.theme.NutriTrack_Daffa_34076492Theme
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 
 class HomeActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        val patientViewModel = ViewModelProvider(
+            this,
+            PatientViewModel.PatientViewModelFactory(this)
+        )[PatientViewModel::class.java]
+
         setContent {
             NutriTrack_Daffa_34076492Theme {
                 val navController = rememberNavController()
@@ -46,273 +74,326 @@ class HomeActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     bottomBar = { BottomNavigationBar(navController) }
                 ) { innerPadding ->
-                        NavigationGraph(innerPadding, navController)
+                    NavigationGraph(
+                        innerPadding = innerPadding,
+                        navController = navController,
+                        patientViewModel = patientViewModel
+                    )
                 }
             }
         }
     }
 }
 
+/**
+ * Defines the navigation graph for the app using Jetpack Compose Navigation.
+ *
+ * @param innerPadding Padding values from the Scaffold to apply to screens.
+ * @param navController The NavHostController to handle navigation actions.
+ * @param patientViewModel The shared ViewModel for patient data and state.
+ */
 @Composable
 fun NavigationGraph(
     innerPadding: PaddingValues,
-    navController: NavHostController
+    navController: NavHostController,
+    patientViewModel: PatientViewModel
 ) {
     NavHost(
         navController = navController,
         startDestination = "home"
     ) {
         composable("home") {
-            // Pass userId to InitScreen
-            HomeScreen(innerPadding, navController)
+            HomeScreen(
+                innerPadding = innerPadding,
+                navController = navController,
+                viewModel = patientViewModel
+            )
         }
         composable("insights") {
-            InsightScreen(innerPadding, navController)
+            InsightScreen(
+                innerPadding = innerPadding,
+                navController = navController,
+                viewModel = patientViewModel
+            )
         }
         composable("nutricoach") {
-            NutricoachScreen(innerPadding)
+            NutricoachScreen(
+                innerPadding = innerPadding,
+                navController = navController,
+                viewModel = patientViewModel
+            )
         }
         composable("settings") {
-            SettingsScreen(innerPadding)
-        }
-    }
-}
-
-// Helper function to get the food score
-fun getFoodScoreForUser(userId: String, foodScores: List<Map<String, String>>): Double {
-    val userScoreData = foodScores.find { it["User_ID"]?.trim() == userId.trim() }
-    return userScoreData?.let {
-        val gender = it["Sex"]
-        when (gender?.lowercase()) {
-            "male" -> it["HEIFAtotalscoreMale"]?.toDoubleOrNull() ?: 0.0
-            "female" -> it["HEIFAtotalscoreFemale"]?.toDoubleOrNull() ?: 0.0
-            else -> 0.0
-        }
-    } ?: 0.0
-}
-
-@Composable
-fun HomeScreen(innerPadding: PaddingValues, navController: NavHostController) {
-    val context = LocalContext.current
-    var userId by remember { mutableStateOf("") }
-    val sharedPreferences = context.getSharedPreferences("Questionnaire", Context.MODE_PRIVATE)
-    sharedPreferences.getString("userId", "") ?: ""
-    userId = getUserIdFromPreferences(context)
-
-    val foodScores = getUserFoodScores(context)
-    val foodScore = getFoodScoreForUser(userId, foodScores)
-
-    Column(
-        modifier = Modifier
-            .padding(innerPadding)
-            .fillMaxSize()
-            .padding(16.dp),
-        horizontalAlignment = Alignment.Start
-    ) {
-        // Display the username
-        Text(
-            text = "Hello",
-            fontSize = 28.sp,
-            fontWeight = FontWeight.Bold,
-            color = Color.Gray
-        )
-
-        // Display the username (userId retrieved from SharedPreferences)
-        Text(
-            text = ",$userId",
-            fontSize = 40.sp,
-            fontWeight = FontWeight.Bold
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // Description about the food intake questionnaire
-            Text(
-                text = "You’ve already filled in your Food Intake Questionnaire, but you can change details here:",
-                fontSize = 16.sp,
-                modifier = Modifier.weight(1f) // Allows text to take available space
+            SettingsScreen(
+                innerPadding = innerPadding,
+                navController = navController,
+                viewModel = patientViewModel
             )
-            Spacer(modifier = Modifier.width(8.dp))
-            Button(
-                onClick = {
-                    // Navigate back to QuestionnaireActivity
-                    val intent = Intent(context, QuestionnaireActivity::class.java)
-                    context.startActivity(intent)
-                },
-                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
-                shape = RoundedCornerShape(8.dp),
-            ) {
-                Icon(Icons.Default.Edit, contentDescription = "Edit", tint = Color.White)
-                Spacer(modifier = Modifier.width(4.dp))
-                Text("Edit", color = Color.White)
-            }
         }
-
-        // Food Score Image
-        Image(
-            painter = painterResource(id = R.drawable.healthy_diet),
-            contentDescription = "Food Score Image",
-            modifier = Modifier.fillMaxWidth() // Adjust this if needed
-        )
-
-        Spacer(modifier = Modifier.height(16.dp))
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 16.dp),
-            shape = RoundedCornerShape(12.dp),
-            elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
-            colors = CardDefaults.cardColors(containerColor = Color.White)
-        ) {
-            Column(
-                modifier = Modifier.padding(16.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Row(
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text(
-                        text = "My Score",
-                        fontSize = 25.sp,
-                        fontWeight = FontWeight.Bold,
-                    )
-                    Text(
-                        text = "See all scores",
-                        fontSize = 15.sp,
-                        color = Color.Gray,
-                        modifier = Modifier.clickable {
-                            navController.navigate("insights")
-
-                        }
-                    )
+        composable("clinician_login") {
+            ClinicianLoginScreen(
+                viewModel = patientViewModel,
+                onAuthenticated = {
+                    // Navigate to clinician dashboard and remove login from back stack
+                    navController.navigate("clinician_dashboard") {
+                        popUpTo("clinician_login") { inclusive = true }
+                    }
                 }
-                Spacer(modifier = Modifier.height(8.dp))
-
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp) // Adds spacing between elements
-                ) {
-                    // Detailed score text
-                    Text(
-                        text = "Your Food Quality score",
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Medium
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-
-                    // Score value
-                    Text(
-                        text = "$foodScore/100",
-                        fontSize = 22.sp,
-                        color = Color(0xFF4CAF50)
-                    )
-                }
-            }
+            )
         }
-
-        // Food Quality Score Info
-        Text(
-            text = "What is the Food Quality Score?",
-            fontSize = 18.sp,
-            fontWeight = FontWeight.Bold
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-        Text(
-            text = "Your Food Quality Score provides a snapshot of how well your eating patterns align with established food guidelines, helping you identify both strengths and opportunities for improvement in your diet.",
-            fontSize = 14.sp,
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-        Text(
-            text = "This personalized measurement considers various food groups including vegetables, fruits, whole grains, and proteins to give you practical insights for making healthier food choices.",
-            fontSize = 14.sp,
-        )
     }
 }
 
-// Helper Function to retrieve userId from SharedPreferences
-fun getUserIdFromPreferences(context: Context): String {
-    val sharedPreferences = context.getSharedPreferences("Questionnaire", Context.MODE_PRIVATE)
-    return sharedPreferences.getString("userId", "") ?: ""
-}
-
+/**
+ * Home screen composable displaying user's HEIFA score and navigation options.
+ *
+ * @param innerPadding Padding values from the Scaffold.
+ * @param navController NavHostController to handle navigation actions.
+ * @param viewModel The PatientViewModel providing data for the screen.
+ */
 @Composable
-fun InsightScreen(innerPadding: PaddingValues, navController: NavHostController) {
+fun HomeScreen(
+    innerPadding: PaddingValues,
+    navController: NavHostController,
+    viewModel: PatientViewModel
+) {
     val context = LocalContext.current
-    var userId by remember { mutableStateOf("") }
-    userId = getUserIdFromPreferences(context)
-    val foodScores = getUserFoodScores(context)
-    val foodScore = getFoodScoreForUser(userId, foodScores)
-    val userScoreData = foodScores.find { it["User_ID"]?.trim() == userId.trim() }
+    val userId = AuthManager.userId
 
-    val progressBarItems = listOf(
-        "Discretionary Foods" to "DiscretionaryHEIFAscore",
-        "Vegetables" to "VegetablesHEIFAscore",
-        "Fruit" to "FruitHEIFAscore",
-        "Grains and Cereals" to "GrainsandcerealsHEIFAscore",
-        "Whole Grains" to "WholegrainsHEIFAscore",
-        "Meat and Alternatives" to "MeatandalternativesHEIFAscore",
-        "Dairy and Alternatives" to "DairyandalternativesHEIFAscore",
-        "Sodium" to "SodiumHEIFAscore",
-        "Alcohol" to "AlcoholHEIFAscore",
-        "Water" to "WaterHEIFAscore",
-        "Sugar" to "SugarHEIFAscore",
-        "Unsaturated Fat" to "UnsaturatedFatHEIFAscore",
-        "Saturated Fat" to "SaturatedFatHEIFAscore"
-    )
-
-    // Define max values for categories
-    val categoryMaxValues = mapOf(
-        // Categories with a max of 5
-        "Grains and Cereals" to 5f,
-        "Whole Grains" to 5f,
-        "Water" to 5f,
-        "Alcohol" to 5f,
-        "Unsaturated Fat" to 5f,
-        "Saturated Fat" to 5f,
-
-        // Categories with a max of 10 (default)
-        "Discretionary Foods" to 10f,
-        "Vegetables" to 10f,
-        "Fruit" to 10f,
-        "Meat and Alternatives" to 10f,
-        "Dairy and Alternatives" to 10f,
-        "Sodium" to 10f,
-        "Sugar" to 10f
-    )
-
-    // Extract scores based on gender
-    val gender = userScoreData?.get("Sex")
-    val progressData = progressBarItems.map { (category, prefix) ->
-        val score = when (gender?.lowercase()) {
-            "male" -> userScoreData["${prefix}Male"]?.toFloatOrNull() ?: 0f
-            "female" -> userScoreData["${prefix}Female"]?.toFloatOrNull() ?: 0f
-            else -> 0f
-        }
-        category to score
+    // Load HEIFA score when userId changes
+    LaunchedEffect(userId) {
+        viewModel.loadHEIFAScore(userId)
+        viewModel.loadPatientData(userId)
     }
 
-    Column(
+    // Observe HEIFA score from the ViewModel's state
+    val heifaScore by viewModel.heifaScore
+    val name = viewModel.patientData.value?.name
+
+    LazyColumn(
         modifier = Modifier
-            .fillMaxSize()
             .padding(innerPadding)
-            .padding(16.dp)
+            .fillMaxSize()
+            .padding(horizontal = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // Heading for the screen
-        Text(
-            text = "Insight Food Score",
-            modifier = Modifier
-                .padding(bottom = 16.dp)
-                .fillMaxWidth()
-                .wrapContentWidth(Alignment.CenterHorizontally),
-            style = MaterialTheme.typography.headlineMedium
+        // Greeting section
+        item {
+            Text(
+                text = "Hello",
+                fontSize = 28.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color.Gray
+            )
+            Text(
+                text = name ?: "User",
+                fontSize = 40.sp,
+                fontWeight = FontWeight.Bold
+            )
+
+        }
+
+        // Info with Edit button to open the questionnaire
+        item {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "You’ve already filled in your Food Intake Questionnaire, but you can change details here:",
+                    fontSize = 16.sp,
+                    modifier = Modifier.weight(1f)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Button(
+                    onClick = {
+                        val intent = Intent(context, QuestionnaireActivity::class.java)
+                        context.startActivity(intent)
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                    shape = RoundedCornerShape(8.dp),
+                ) {
+                    Icon(Icons.Default.Edit, contentDescription = "Edit", tint = Color.White)
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Edit", color = Color.White)
+                }
+            }
+        }
+
+        // Food score illustration image
+        item {
+            Image(
+                painter = painterResource(id = R.drawable.healthy_diet),
+                contentDescription = "Food Score Image",
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
+
+        // Card showing the Food Quality score with navigation to insights
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+                colors = CardDefaults.cardColors(containerColor = Color.White)
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Row(
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = "My Score",
+                            fontSize = 25.sp,
+                            fontWeight = FontWeight.Bold,
+                        )
+                        Text(
+                            text = "See all scores",
+                            fontSize = 15.sp,
+                            color = Color.Gray,
+                            modifier = Modifier.clickable {
+                                navController.navigate("insights")
+                            }
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = "Your Food Quality score",
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                        Text(
+                            text = "$heifaScore/100",
+                            fontSize = 22.sp,
+                            color = Color(0xFF4CAF50)
+                        )
+                    }
+                }
+            }
+        }
+
+        // Explanation of Food Quality Score title
+        item {
+            Text(
+                text = "What is the Food Quality Score?",
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
+
+        // Explanation text paragraphs
+        item {
+            Text(
+                text = "Your Food Quality Score provides a snapshot of how well your eating patterns align with established food guidelines, helping you identify both strengths and opportunities for improvement in your diet.",
+                fontSize = 14.sp
+            )
+        }
+        item {
+            Text(
+                text = "This personalized measurement considers various food groups including vegetables, fruits, whole grains, and proteins to give you practical insights for making healthier food choices.",
+                fontSize = 14.sp
+            )
+        }
+    }
+}
+
+/**
+ * InsightScreen displays detailed HEIFA scores for a patient, including category-wise progress bars,
+ * total Food Quality Score, and options to share the score or navigate to the Nutricoach screen.
+ *
+ * @param innerPadding Padding values from the scaffold or parent layout to apply consistent spacing.
+ * @param navController Navigation controller used to navigate between app screens.
+ * @param viewModel ViewModel that provides patient data and handles data loading logic.
+ *
+ * Behavior:
+ * - Observes patient data from the ViewModel and shows a loading indicator until data is loaded.
+ * - Displays progress bars for multiple food categories with their respective scores.
+ * - Shows total Food Quality Score with a progress bar and formatted text.
+ * - Provides "Share" button to share the total score via other apps.
+ * - Provides "Improve My Diet" button to navigate to the Nutricoach screen.
+ */
+@SuppressLint("DefaultLocale")
+@Composable
+fun InsightScreen(
+    innerPadding: PaddingValues,
+    navController: NavHostController,
+    viewModel: PatientViewModel
+) {
+    val context = LocalContext.current
+    val userId = AuthManager.userId
+
+    val patient by viewModel.patientData.observeAsState()
+
+    // Load patient when the screen appears
+    LaunchedEffect(userId) {
+        viewModel.loadPatientData(userId)
+    }
+
+    if (patient == null) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            CircularProgressIndicator()
+        }
+    } else {
+        val progressBarItems = listOf(
+            "Discretionary Foods" to patient!!.discretionaryHEIFAScore,
+            "Vegetables" to patient!!.vegetablesHEIFAScore,
+            "Fruit" to patient!!.fruitHEIFAScore,
+            "Grains and Cereals" to patient!!.grainsAndCerealsHEIFAScore,
+            "Whole Grains" to patient!!.wholeGrainsHEIFAScore,
+            "Meat and Alternatives" to patient!!.meatAndAlternativesHEIFAScore,
+            "Dairy and Alternatives" to patient!!.dairyAndAlternativesHEIFAScore,
+            "Sodium" to patient!!.sodiumHEIFAScore,
+            "Alcohol" to patient!!.alcoholHEIFAScore,
+            "Water" to patient!!.waterHEIFAScore,
+            "Sugar" to patient!!.sugarHEIFAScore,
+            "Saturated Fat" to patient!!.saturatedFatHEIFAScore,
+            "Unsaturated Fat" to patient!!.unsaturatedFatHEIFAScore
         )
 
-        Column {
-            progressData.forEach { (category, score) ->
+        val categoryMaxValues = mapOf(
+            "Grains and Cereals" to 5f,
+            "Whole Grains" to 5f,
+            "Water" to 5f,
+            "Alcohol" to 5f,
+            "Unsaturated Fat" to 5f,
+            "Saturated Fat" to 5f,
+            // Default 10 for the rest
+            "Discretionary Foods" to 10f,
+            "Vegetables" to 10f,
+            "Fruit" to 10f,
+            "Meat and Alternatives" to 10f,
+            "Dairy and Alternatives" to 10f,
+            "Sodium" to 10f,
+            "Sugar" to 10f
+        )
+
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            item {
+                Text(
+                    text = "Insight Food Score",
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .wrapContentWidth(Alignment.CenterHorizontally),
+                    style = MaterialTheme.typography.headlineMedium
+                )
+            }
+
+            items(progressBarItems) { (category, score) ->
                 val maxScore = categoryMaxValues[category] ?: 10f
                 Row(
                     modifier = Modifier
@@ -320,29 +401,25 @@ fun InsightScreen(innerPadding: PaddingValues, navController: NavHostController)
                         .padding(vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    // Column 1: Food Category (left-aligned)
                     Text(
                         text = category,
                         modifier = Modifier
-                            .weight(1.5f) // More space for category text
+                            .weight(1.5f)
                             .wrapContentWidth(Alignment.Start),
                         fontSize = 12.sp,
                         textAlign = TextAlign.Start
                     )
-                    // Column 2: Slider
                     LinearProgressIndicator(
-                        progress = score / maxScore, // Normalize score to 0-1 range
+                        progress = score.toFloat() / maxScore,
                         modifier = Modifier
                             .weight(2f)
                             .padding(horizontal = 4.dp)
                             .height(6.dp),
-                        color = MaterialTheme.colorScheme.primary, // Customize color
-                        trackColor = Color.LightGray // Background color for the progress bar
+                        color = MaterialTheme.colorScheme.primary,
+                        trackColor = Color.LightGray
                     )
-
-                    // Column 3: Score (right-aligned)
                     Text(
-                        text = "${score.toInt()}/${maxScore.toInt()}", // Display correct max
+                        text = String.format("%.1f/%.0f", score, maxScore),
                         modifier = Modifier
                             .weight(0.8f)
                             .wrapContentWidth(Alignment.End),
@@ -351,89 +428,425 @@ fun InsightScreen(innerPadding: PaddingValues, navController: NavHostController)
                     )
                 }
             }
-        }
 
-        // Total food quality score
-        Text(
-            text = "Total Food Quality Score:",
-            style = MaterialTheme.typography.titleMedium,
-            modifier = Modifier.padding(vertical = 8.dp)
-        )
-
-        // Progress Bar with score displayed next to it
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically // Align vertically in the center
-        ) {
-            // Progress Bar
-            LinearProgressIndicator(
-                progress = foodScore.toInt() / 100f,
-                modifier = Modifier
-                    .weight(2f) // Take up most of the row
-                    .padding(horizontal = 4.dp)
-                    .height(6.dp),
-                color = MaterialTheme.colorScheme.primary, // Customize color
-                trackColor = Color.LightGray // Background color for the progress bar
-            )
-
-            // Display the score next to the progress bar
-            Spacer(modifier = Modifier.width(8.dp)) // Add space between the bar and the score
-            Text(
-                text = "${foodScore.toInt()}/100", // Display score with 100 as the max value
-                fontSize = 16.sp,
-                color = MaterialTheme.colorScheme.primary, // Customize text color
-                fontWeight = FontWeight.Bold
-            )
-        }
-
-        Spacer(modifier = Modifier.height(24.dp))
-
-        // Buttons
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            val context = LocalContext.current
-            val shareText = "My Food Quality Score is $foodScore/100 using NutriTrack! Try it out!"
-
-
-            Button(
-                onClick = {
-                    val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                        type = "text/plain"
-                        putExtra(Intent.EXTRA_TEXT, shareText)
-                    }
-                    // Launch chooser
-                    context.startActivity(
-                        Intent.createChooser(shareIntent, "Share via")
-                    )
-                },
-                modifier = Modifier.weight(1f)
-            ) {
-                Text(text = "Share")
+            item {
+                Text(
+                    text = "Total Food Quality Score:",
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.padding(vertical = 8.dp)
+                )
             }
 
-            Spacer(modifier = Modifier.width(16.dp))
-            Button(
-                onClick = {navController.navigate("nutricoach") },
-                modifier = Modifier.weight(1f)
-            ) {
-                Text(text = "Improve My Diet")
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    LinearProgressIndicator(
+                        progress = patient!!.HEIFATotalScore.toFloat() / 100f,
+                        modifier = Modifier
+                            .weight(2f)
+                            .padding(horizontal = 4.dp)
+                            .height(6.dp),
+                        color = MaterialTheme.colorScheme.primary,
+                        trackColor = Color.LightGray
+                    )
+
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = String.format("%.1f/100", patient!!.HEIFATotalScore),
+                        fontSize = 16.sp,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+
+            item {
+                Spacer(modifier = Modifier.height(24.dp))
+            }
+
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    val shareText =
+                        "My Food Quality Score is ${patient!!.HEIFATotalScore.toInt()}/100 using NutriTrack! Try it out!"
+
+                    Button(
+                        onClick = {
+                            val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                                type = "text/plain"
+                                putExtra(Intent.EXTRA_TEXT, shareText)
+                            }
+                            context.startActivity(Intent.createChooser(shareIntent, "Share via"))
+                        },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text(text = "Share")
+                    }
+
+                    Spacer(modifier = Modifier.width(16.dp))
+
+                    Button(
+                        onClick = { navController.navigate("nutricoach") },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text(text = "Improve My Diet")
+                    }
+                }
             }
         }
     }
 }
 
+
 @Composable
-fun NutricoachScreen(innerPadding: PaddingValues) {
+fun NutricoachScreen(
+    innerPadding: PaddingValues,
+    navController: NavHostController,
+    viewModel: PatientViewModel) {
     TODO("Not yet implemented")
 }
 
+/**
+ * SettingsScreen displays the user account details and account management options such as Logout and Clinician Login.
+ *
+ * @param innerPadding Padding values from parent layout (e.g., Scaffold) to maintain consistent spacing.
+ * @param navController Navigation controller used to navigate between screens.
+ * @param viewModel ViewModel providing patient data and handling data loading.
+ *
+ * Behavior:
+ * - Loads and observes patient data using the current authenticated user ID.
+ * - Shows account info like name, user ID, phone number, and sex inside a styled card.
+ * - Provides clickable options for Logout and Clinician Login.
+ * - Logout clears authentication and navigates back to MainActivity.
+ * - Clinician Login navigates to the clinician login screen.
+ */
 @Composable
-fun SettingsScreen(innerPadding: PaddingValues) {
-    TODO("Not yet implemented")
+fun SettingsScreen(
+    innerPadding: PaddingValues,
+    navController: NavHostController,
+    viewModel: PatientViewModel
+) {
+    val userId = AuthManager.userId
+    val patient by viewModel.patientData.observeAsState()
+
+    LaunchedEffect(userId) {
+        viewModel.loadPatientData(userId)
+    }
+
+    val context = LocalContext.current
+
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(innerPadding)
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(24.dp)
+    ) {
+        item {
+            Text(
+                text = "Settings",
+                style = MaterialTheme.typography.headlineMedium,
+                modifier = Modifier.padding(bottom = 16.dp)
+            )
+        }
+
+        item {
+            Text(
+                text = "Account",
+                style = MaterialTheme.typography.labelLarge.copy(color = Color.Gray),
+                modifier = Modifier.padding(bottom = 8.dp)
+            )
+        }
+
+        item {
+            Card(
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    patient?.let {
+                        InfoRow(Icons.Default.Person, "Name", it.name.toString())
+                        Divider()
+                        InfoRow(Icons.Default.Badge, "User ID", it.userId.toString())
+                        Divider()
+                        InfoRow(Icons.Default.Phone, "Phone", it.phoneNumber)
+                        Divider()
+                        InfoRow(
+                            icon = if (it.sex.equals("Male", ignoreCase = true)) Icons.Default.Male else Icons.Default.Female,
+                            label = "Sex",
+                            value = it.sex
+                        )
+                    } ?: Text("Loading patient data…")
+                }
+            }
+        }
+
+        item {
+            Divider()
+        }
+
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = MaterialTheme.shapes.medium,
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+            ) {
+                Column(Modifier.padding(16.dp)) {
+                    Text(
+                        text = "Account Management",
+                        style = MaterialTheme.typography.labelLarge.copy(color = Color.Gray),
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    )
+
+                    SettingsClickableTextRow(
+                        text = "Logout",
+                        icon = Icons.AutoMirrored.Filled.Logout,
+                        onClick = {
+                            AuthManager.logout()
+                            val intent = Intent(context, MainActivity::class.java).apply {
+                                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+                            }
+                            context.startActivity(intent)
+                        }
+                    )
+                    Divider()
+                    SettingsClickableTextRow(
+                        text = "Clinician Login",
+                        icon = Icons.Filled.AdminPanelSettings,
+                        onClick = {
+                            navController.navigate("clinician_login")
+                        }
+                    )
+                }
+            }
+        }
+    }
 }
 
+/**
+ * ClinicianLoginScreen provides a secure login form for clinicians to authenticate with a passphrase.
+ *
+ * @param viewModel ViewModel managing authentication state, input, and error messages.
+ * @param onAuthenticated Callback invoked after successful authentication to proceed with navigation or actions.
+ *
+ * Behavior:
+ * - Displays a password input field with toggle visibility option.
+ * - Shows authentication errors if any.
+ * - Upon successful authentication, starts the ClinicianActivity and calls the onAuthenticated callback.
+ */
+@Composable
+fun ClinicianLoginScreen(
+    viewModel: PatientViewModel,
+    onAuthenticated: () -> Unit
+) {
+    val context = LocalContext.current
+    val isAuthenticated = viewModel.isAuthenticated
+    val passphraseInput = viewModel.passphraseInput
+    val errorMessage = viewModel.errorMessage
+
+    // State to toggle password visibility
+    var passwordVisible by remember { mutableStateOf(false) }
+
+    if (isAuthenticated) {
+        LaunchedEffect(Unit) {
+            context.startActivity(Intent(context, ClinicianActivity::class.java))
+            onAuthenticated()
+        }
+    } else {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background),
+            contentAlignment = Alignment.Center
+        ) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth(0.9f)
+                    .wrapContentHeight(),
+                shape = RoundedCornerShape(20.dp),
+                elevation = CardDefaults.cardElevation(defaultElevation = 12.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f)
+                )
+            ) {
+                Column(
+                    modifier = Modifier
+                        .padding(24.dp),
+                    verticalArrangement = Arrangement.spacedBy(20.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+
+                    // Title Row with Icon
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.MedicalServices,
+                            contentDescription = "Clinician Icon",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier
+                                .size(40.dp)
+                                .padding(end = 12.dp)
+                        )
+                        Text(
+                            text = "Clinician Login",
+                            style = MaterialTheme.typography.headlineSmall.copy(
+                                fontWeight = FontWeight.Bold
+                            ),
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+
+                    OutlinedTextField(
+                        value = passphraseInput,
+                        onValueChange = { viewModel.passphraseInput = it },
+                        label = { Text("Clinician Key") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                        visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                        trailingIcon = {
+                            val icon = if (passwordVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility
+                            val description = if (passwordVisible) "Hide password" else "Show password"
+
+                            IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                                Icon(imageVector = icon, contentDescription = description)
+                            }
+                        }
+                    )
+
+                    Button(
+                        onClick = { viewModel.authenticate() },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(56.dp)
+                            .shadow(8.dp, RoundedCornerShape(12.dp)),
+                        shape = RoundedCornerShape(12.dp),
+                        contentPadding = PaddingValues(horizontal = 24.dp, vertical = 12.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.AdminPanelSettings,
+                            contentDescription = "Clinician Icon",
+                            modifier = Modifier
+                                .size(40.dp)
+                                .padding(end = 8.dp)
+                        )
+                        Text(
+                            text = "Clinician Login",
+                            style = MaterialTheme.typography.bodyLarge.copy(
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        )
+                    }
+
+                    if (errorMessage != null) {
+                        Text(
+                            text = errorMessage,
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodyMedium,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * InfoRow displays an icon alongside a label and value in a horizontal row, used for showing key-value pairs.
+ *
+ * @param icon The icon to display at the start of the row.
+ * @param label The label describing the value.
+ * @param value The value text to display next to the label.
+ */
+@Composable
+fun InfoRow(
+    icon: ImageVector,
+    label: String,
+    value: String
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp)
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = label,
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.size(24.dp)
+        )
+        Spacer(modifier = Modifier.width(16.dp))
+        Column {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelMedium,
+                color = Color.Gray
+            )
+            Text(
+                text = value,
+                style = MaterialTheme.typography.bodyLarge
+            )
+        }
+    }
+}
+
+/**
+ * SettingsClickableTextRow creates a clickable row with an icon and text, useful for menu options in settings.
+ *
+ * @param text The text to display.
+ * @param icon The icon shown alongside the text.
+ * @param contentColor The tint color for the icon and text (default is onSurface color).
+ * @param onClick Lambda function to invoke when the row is clicked.
+ */
+@Composable
+fun SettingsClickableTextRow(
+    text: String,
+    icon: ImageVector,
+    contentColor: Color = MaterialTheme.colorScheme.onSurface,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = contentColor
+        )
+        Spacer(modifier = Modifier.width(16.dp))
+        Text(
+            text = text,
+            style = MaterialTheme.typography.bodyLarge,
+            color = contentColor
+        )
+    }
+}
+
+/**
+ * BottomNavigationBar displays a navigation bar at the bottom of the screen with tabs for Home, Insights, NutriCoach, and Settings.
+ *
+ * @param navController The NavHostController used to navigate between screens and observe the current navigation state.
+ *
+ * Behavior:
+ * - Tracks the currently selected navigation item based on the current route.
+ * - Updates selection state dynamically when navigation changes.
+ * - On item click, navigates to the corresponding screen route.
+ * - Uses icons (both vector and custom drawable resources) and labels to represent each tab.
+ */
 @Composable
 fun BottomNavigationBar(navController: NavHostController) {
     var selectedItem by remember { mutableStateOf(0) }
@@ -477,113 +890,4 @@ fun BottomNavigationBar(navController: NavHostController) {
             )
         }
     }
-}
-
-fun getUserFoodScores(context: Context): List<Map<String, String>> {
-    val userFoodScores = mutableListOf<Map<String, String>>()
-    try {
-        // Open the CSV file from assets
-        context.assets.open("data.csv").use { inputStream ->
-            BufferedReader(InputStreamReader(inputStream)).use { reader ->
-                // Read the header row to get column names
-                val columns = reader.readLine().split(",")
-
-                // Find the indices of the relevant columns (all HEIFA scores)
-                val userIdIndex = columns.indexOf("User_ID")
-                val sexIndex = columns.indexOf("Sex")
-                val maleScoreIndex = columns.indexOf("HEIFAtotalscoreMale")
-                val femaleScoreIndex = columns.indexOf("HEIFAtotalscoreFemale")
-
-                // Discretionary scores
-                val discretionaryMaleIndex = columns.indexOf("DiscretionaryHEIFAscoreMale")
-                val discretionaryFemaleIndex = columns.indexOf("DiscretionaryHEIFAscoreFemale")
-
-                // Vegetables scores
-                val vegetablesMaleIndex = columns.indexOf("VegetablesHEIFAscoreMale")
-                val vegetablesFemaleIndex = columns.indexOf("VegetablesHEIFAscoreFemale")
-
-                // Fruit scores
-                val fruitMaleIndex = columns.indexOf("FruitHEIFAscoreMale")
-                val fruitFemaleIndex = columns.indexOf("FruitHEIFAscoreFemale")
-
-                // Grains and cereals scores
-                val grainsMaleIndex = columns.indexOf("GrainsandcerealsHEIFAscoreMale")
-                val grainsFemaleIndex = columns.indexOf("GrainsandcerealsHEIFAscoreFemale")
-
-                // Whole grains scores
-                val wholeGrainsMaleIndex = columns.indexOf("WholegrainsHEIFAscoreMale")
-                val wholeGrainsFemaleIndex = columns.indexOf("WholegrainsHEIFAscoreFemale")
-
-                // Meat and alternatives scores
-                val meatMaleIndex = columns.indexOf("MeatandalternativesHEIFAscoreMale")
-                val meatFemaleIndex = columns.indexOf("MeatandalternativesHEIFAscoreFemale")
-
-                // Dairy and alternatives scores
-                val dairyMaleIndex = columns.indexOf("DairyandalternativesHEIFAscoreMale")
-                val dairyFemaleIndex = columns.indexOf("DairyandalternativesHEIFAscoreFemale")
-
-                // Sodium scores
-                val sodiumMaleIndex = columns.indexOf("SodiumHEIFAscoreMale")
-                val sodiumFemaleIndex = columns.indexOf("SodiumHEIFAscoreFemale")
-
-                // Alcohol scores
-                val alcoholMaleIndex = columns.indexOf("AlcoholHEIFAscoreMale")
-                val alcoholFemaleIndex = columns.indexOf("AlcoholHEIFAscoreFemale")
-
-                // Water scores
-                val waterMaleIndex = columns.indexOf("WaterHEIFAscoreMale")
-                val waterFemaleIndex = columns.indexOf("WaterHEIFAscoreFemale")
-
-                // Sugar scores
-                val sugarMaleIndex = columns.indexOf("SugarHEIFAscoreMale")
-                val sugarFemaleIndex = columns.indexOf("SugarHEIFAscoreFemale")
-
-                // Unsaturated fat scores
-                val unsaturatedFatMaleIndex = columns.indexOf("UnsaturatedFatHEIFAscoreMale")
-                val unsaturatedFatFemaleIndex = columns.indexOf("UnsaturatedFatHEIFAscoreFemale")
-
-                // Read each subsequent line
-                reader.forEachLine { line ->
-                    val values = line.split(",")
-
-                    // Extract all the relevant columns for each row
-                    val userScoreData = mutableMapOf<String, String>()
-                    userScoreData["User_ID"] = values[userIdIndex]
-                    userScoreData["Sex"] = values[sexIndex]
-                    userScoreData["HEIFAtotalscoreMale"] = values[maleScoreIndex]
-                    userScoreData["HEIFAtotalscoreFemale"] = values[femaleScoreIndex]
-                    userScoreData["DiscretionaryHEIFAscoreMale"] = values[discretionaryMaleIndex]
-                    userScoreData["DiscretionaryHEIFAscoreFemale"] = values[discretionaryFemaleIndex]
-                    userScoreData["VegetablesHEIFAscoreMale"] = values[vegetablesMaleIndex]
-                    userScoreData["VegetablesHEIFAscoreFemale"] = values[vegetablesFemaleIndex]
-                    userScoreData["FruitHEIFAscoreMale"] = values[fruitMaleIndex]
-                    userScoreData["FruitHEIFAscoreFemale"] = values[fruitFemaleIndex]
-                    userScoreData["GrainsandcerealsHEIFAscoreMale"] = values[grainsMaleIndex]
-                    userScoreData["GrainsandcerealsHEIFAscoreFemale"] = values[grainsFemaleIndex]
-                    userScoreData["WholegrainsHEIFAscoreMale"] = values[wholeGrainsMaleIndex]
-                    userScoreData["WholegrainsHEIFAscoreFemale"] = values[wholeGrainsFemaleIndex]
-                    userScoreData["MeatandalternativesHEIFAscoreMale"] = values[meatMaleIndex]
-                    userScoreData["MeatandalternativesHEIFAscoreFemale"] = values[meatFemaleIndex]
-                    userScoreData["DairyandalternativesHEIFAscoreMale"] = values[dairyMaleIndex]
-                    userScoreData["DairyandalternativesHEIFAscoreFemale"] = values[dairyFemaleIndex]
-                    userScoreData["SodiumHEIFAscoreMale"] = values[sodiumMaleIndex]
-                    userScoreData["SodiumHEIFAscoreFemale"] = values[sodiumFemaleIndex]
-                    userScoreData["AlcoholHEIFAscoreMale"] = values[alcoholMaleIndex]
-                    userScoreData["AlcoholHEIFAscoreFemale"] = values[alcoholFemaleIndex]
-                    userScoreData["WaterHEIFAscoreMale"] = values[waterMaleIndex]
-                    userScoreData["WaterHEIFAscoreFemale"] = values[waterFemaleIndex]
-                    userScoreData["SugarHEIFAscoreMale"] = values[sugarMaleIndex]
-                    userScoreData["SugarHEIFAscoreFemale"] = values[sugarFemaleIndex]
-                    userScoreData["UnsaturatedFatHEIFAscoreMale"] = values[unsaturatedFatMaleIndex]
-                    userScoreData["UnsaturatedFatHEIFAscoreFemale"] = values[unsaturatedFatFemaleIndex]
-                    userFoodScores.add(userScoreData)
-                }
-            }
-        }
-    } catch (e: Exception) {
-        // Log errors but fail gracefully
-        println("Error loading food scores: ${e.message}")
-    }
-
-    return userFoodScores
 }

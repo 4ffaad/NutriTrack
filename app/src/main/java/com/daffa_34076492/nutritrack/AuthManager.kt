@@ -14,7 +14,7 @@ object AuthManager {
     }
 
     fun logout() {
-        _userId = 0 // or any sentinel value like -1 if 0 is valid
+        _userId = 0
     }
 }
 

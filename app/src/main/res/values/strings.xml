@@ -7,4 +7,6 @@
     <string name="title_activity_home_screen">HomeScreen</string>
     <string name="title_activity_register">RegisterActivity</string>
     <string name="title_activity_main2">MainActivity2</string>
+    <string name="title_activity_clinician">ClinicianActivity</string>
+    <string name="title_activity_password_reset">PasswordResetActivity</string>
 </resources>
