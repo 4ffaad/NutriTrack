@@ -52,11 +52,14 @@ import com.daffa_34076492.nutritrack.auth.AuthManager
 import com.daffa_34076492.nutritrack.ui.theme.NutriTrack_Daffa_34076492Theme
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
+import com.daffa_34076492.nutritrack.auth.AuthManager.userId
 
 class HomeActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -77,7 +80,7 @@ class HomeActivity : ComponentActivity() {
                     NavigationGraph(
                         innerPadding = innerPadding,
                         navController = navController,
-                        patientViewModel = patientViewModel
+                        patientViewModel = patientViewModel,
                     )
                 }
             }
@@ -160,15 +163,14 @@ fun HomeScreen(
     val context = LocalContext.current
     val userId = AuthManager.userId
 
-    // Load HEIFA score when userId changes
     LaunchedEffect(userId) {
         viewModel.loadHEIFAScore(userId)
         viewModel.loadPatientData(userId)
     }
 
-    // Observe HEIFA score from the ViewModel's state
-    val heifaScore by viewModel.heifaScore
-    val name = viewModel.patientData.value?.name
+    val heifaScore by viewModel.heifaScore.collectAsState()
+    val patientData by viewModel.patientData.collectAsState()
+    val name = patientData?.name
 
     LazyColumn(
         modifier = Modifier
@@ -331,7 +333,7 @@ fun InsightScreen(
     val context = LocalContext.current
     val userId = AuthManager.userId
 
-    val patient by viewModel.patientData.observeAsState()
+    val patient by viewModel.patientData.collectAsState()
 
     // Load patient when the screen appears
     LaunchedEffect(userId) {
@@ -506,9 +508,73 @@ fun InsightScreen(
 fun NutricoachScreen(
     innerPadding: PaddingValues,
     navController: NavHostController,
-    viewModel: PatientViewModel) {
-    TODO("Not yet implemented")
+    viewModel: PatientViewModel // use the correct ViewModel here
+) {
+    val selectedFruit by viewModel.selectedFruit
+    val isLoading by viewModel.isLoading
+    val errorMessage by viewModel.fruitErrorMessage
+
+    var searchQuery by remember { mutableStateOf("") }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(innerPadding)
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+
+        // 🔎 Search Field
+        OutlinedTextField(
+            value = searchQuery,
+            onValueChange = { searchQuery = it },
+            label = { Text("Enter fruit name") },
+            modifier = Modifier.fillMaxWidth(),
+            trailingIcon = {
+                IconButton(onClick = {
+                    if (searchQuery.isNotBlank()) {
+                        viewModel.searchFruit(searchQuery)
+                    }
+                }) {
+                    Icon(Icons.Default.Search, contentDescription = "Search")
+                }
+            }
+        )
+
+        // ⏳ Loading
+        if (isLoading) {
+            Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator()
+            }
+        }
+
+        // ⚠️ Error Message
+        if (errorMessage != null) {
+            Text(text = errorMessage ?: "", color = Color.Red)
+        }
+
+        // ✅ Fruit Info Card
+        selectedFruit?.let { fruit ->
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                elevation = CardDefaults.cardElevation(6.dp)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text("Fruit Name: ${fruit.name}", fontWeight = FontWeight.Bold)
+                    Text("Family: ${fruit.family}")
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text("Calories: ${fruit.nutritions.calories}")
+                    Text("Fat: ${fruit.nutritions.fat}")
+                    Text("Sugar: ${fruit.nutritions.sugar}")
+                    Text("Carbohydrates: ${fruit.nutritions.carbohydrates}")
+                    Text("Protein: ${fruit.nutritions.protein}")
+                }
+            }
+        }
+    }
 }
+
+
 
 /**
  * SettingsScreen displays the user account details and account management options such as Logout and Clinician Login.
@@ -531,7 +597,7 @@ fun SettingsScreen(
     viewModel: PatientViewModel
 ) {
     val userId = AuthManager.userId
-    val patient by viewModel.patientData.observeAsState()
+    val patient by viewModel.patientData.collectAsState()
 
     LaunchedEffect(userId) {
         viewModel.loadPatientData(userId)

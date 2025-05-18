@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
+    <uses-permission android:name="android.permission.INTERNET" />
 
     <application
         android:allowBackup="true"
@@ -21,11 +22,6 @@
             android:name=".ClinicianActivity"
             android:exported="false"
             android:label="@string/title_activity_clinician"
-            android:theme="@style/Theme.NutriTrack_Daffa_34076492" />
-        <activity
-            android:name=".MainActivity2"
-            android:exported="false"
-            android:label="@string/title_activity_main2"
             android:theme="@style/Theme.NutriTrack_Daffa_34076492" />
         <activity
             android:name=".RegisterActivity"
