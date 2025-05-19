@@ -1,0 +1,71 @@
+package com.daffa_34076492.nutritrack.data
+
+import android.content.Context
+import android.util.Log
+import com.daffa_34076492.nutritrack.api.GeminiApi
+import com.daffa_34076492.nutritrack.data.local.AppDatabase
+import com.daffa_34076492.nutritrack.model.GeminiRequest
+import com.daffa_34076492.nutritrack.model.GenerationConfig
+import com.daffa_34076492.nutritrack.model.MotivationalMessage
+import com.daffa_34076492.nutritrack.model.RequestContent
+import com.daffa_34076492.nutritrack.model.RequestPart
+import kotlinx.coroutines.flow.Flow
+import java.io.IOException
+
+
+class MotivationalMessageRepository(context: Context) {
+    private val motivationalDao = AppDatabase.getDatabase(context).motivationalMessageDao()
+
+    suspend fun saveMessage(message: MotivationalMessage) {
+        motivationalDao.insertMessage(message)
+    }
+
+    fun getMessages(userId: Int): Flow<List<MotivationalMessage>> = motivationalDao.getMessagesForUser(userId)
+
+    suspend fun getMotivationalMessage(prompt: String): String {
+        try {
+            val request = GeminiRequest(
+                contents = listOf(
+                    RequestContent(
+                        parts = listOf(RequestPart(text = prompt))
+                    )
+                ),
+                generationConfig = GenerationConfig(
+                    temperature = 0.9f,
+                    maxOutputTokens = 20
+                )
+            )
+
+            val response = GeminiApi.service.generateMotivationalMessage(
+                apiKey = "AIzaSyCbXhw9tn4fScNLkECfPK9WhpCg5vE55Z4",
+                request = request
+            )
+
+            return response.candidates
+                ?.firstOrNull()
+                ?.content
+                ?.parts
+                ?.firstOrNull()
+                ?.text
+                ?: "No message received."
+
+        } catch (e: Exception) {
+            Log.e("MotivationalRepo", "HTTP error: ${e.message}", e)
+            throw IOException("Server error occurred. Please try again.")
+        }
+    }
+
+
+    companion object {
+        @Volatile
+        private var INSTANCE: MotivationalMessageRepository? = null
+
+        fun getInstance(context: Context): MotivationalMessageRepository {
+            return INSTANCE ?: synchronized(this) {
+                val instance = MotivationalMessageRepository(context)
+                INSTANCE = instance
+                instance
+            }
+        }
+    }
+}

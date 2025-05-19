@@ -5,12 +5,13 @@
     import androidx.room.Room
     import androidx.room.RoomDatabase
     import com.daffa_34076492.nutritrack.data.model.FoodIntake
+    import com.daffa_34076492.nutritrack.model.MotivationalMessage
     import com.daffa_34076492.nutritrack.model.Patient
 
 
     @Database(
-        entities = [Patient::class, FoodIntake::class],
-        version = 8,
+        entities = [Patient::class, FoodIntake::class, MotivationalMessage::class],
+        version = 10,
         exportSchema = false)
 
     abstract class AppDatabase : RoomDatabase() {
@@ -21,6 +22,7 @@
 
         abstract fun patientDao(): PatientDao
         abstract fun foodIntakeDao(): FoodIntakeDao
+        abstract fun motivationalMessageDao(): MotivationalMessageDao
 
         companion object {
             /**

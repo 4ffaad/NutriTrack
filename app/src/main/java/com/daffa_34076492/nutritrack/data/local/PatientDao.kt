@@ -52,8 +52,11 @@ interface PatientDao {
     @Query("SELECT HEIFATotalScore FROM patient_table WHERE userId = :userId LIMIT 1")
     suspend fun getHEIFAScore(userId: Int): Double?
 
-
     @Query("SELECT * FROM patient_table WHERE userId = :userId")
     suspend fun getFoodScoresByUserId(userId: Int): Patient?
+
+
+
+
 
 }

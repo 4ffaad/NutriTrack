@@ -1,19 +1,22 @@
 package com.daffa_34076492.nutritrack.ViewModels
 
 import android.content.Context
-import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.LiveData
-import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
-import com.daffa_34076492.nutritrack.auth.AuthManager.userId
 import com.daffa_34076492.nutritrack.data.PatientRepository
 import com.daffa_34076492.nutritrack.model.Patient
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import androidx.compose.runtime.State
+import androidx.lifecycle.MutableLiveData
+import com.daffa_34076492.nutritrack.auth.AuthManager
+
 
 /**
  * ViewModel for handling patient authentication and registration logic.
@@ -32,8 +35,12 @@ class PatientViewModel(context: Context) : ViewModel() {
     fun onPhoneNumberChange(newVal: String) { phoneNumberInput.value = newVal }
     fun onNewPasswordChange(newVal: String) { newPasswordInput.value = newVal }
     fun onConfirmPasswordChange(newVal: String) { confirmPasswordInput.value = newVal }
+    private val _heifaScore = MutableStateFlow<Double?>(null)
+    val heifaScore: StateFlow<Double?> = _heifaScore
 
-    // LiveData for user IDs
+    private val _patientData = MutableStateFlow<Patient?>(null)
+    val patientData: StateFlow<Patient?> = _patientData
+
     val userIds: LiveData<List<Int>> = patientRepo.getUserIds()
 
     init {
@@ -75,25 +82,19 @@ class PatientViewModel(context: Context) : ViewModel() {
         }
     }
 
-    private val _heifaScore = mutableStateOf<Double?>(null)
-    val heifaScore: State<Double?> = _heifaScore
-
     fun loadHEIFAScore(userId: Int) {
         viewModelScope.launch {
             _heifaScore.value = patientRepo.getHEIFAScore(userId)
         }
     }
 
-    private val _patientData = MutableLiveData<Patient?>()
-    val patientData: LiveData<Patient?> = _patientData
 
     fun loadPatientData(userId: Int) {
         viewModelScope.launch {
-            _patientData.postValue(patientRepo.getFoodScoresByUserId(userId))
+            _patientData.value = patientRepo.getPatientByUserId(userId)
         }
     }
 
-    // Clinician authentication
     var passphraseInput by mutableStateOf("")
     var isAuthenticated by mutableStateOf(false)
     var errorMessage by mutableStateOf<String?>(null)
@@ -105,21 +106,6 @@ class PatientViewModel(context: Context) : ViewModel() {
         errorMessage = if (!isAuthenticated) "Incorrect passphrase" else null
     }
 
-    // Phone verification
-    var verificationPassed by mutableStateOf(false)
-    var verificationError by mutableStateOf<String?>(null)
-
-    fun verifyUserByPhone(userId: Int, phoneNumber: String) {
-        viewModelScope.launch {
-            try {
-                val isValid = patientRepo.verifyUser(userId, phoneNumber)
-                verificationPassed = isValid
-                verificationError = if (isValid) null else "No matching user found."
-            } catch (e: Exception) {
-                verificationError = "Verification failed: ${e.message}"
-            }
-        }
-    }
     suspend fun resetPassword(): Boolean {
         val userId = userIdInput.value.toIntOrNull()
         val phone = phoneNumberInput.value
@@ -152,7 +138,15 @@ class PatientViewModel(context: Context) : ViewModel() {
         }
     }
 
+    private val _isOptimal = MutableLiveData<Boolean>()
+    val isOptimal: LiveData<Boolean> get() = _isOptimal
 
+    fun checkIfUserOptimal(userId: Int) {
+        viewModelScope.launch {
+            val optimal = patientRepo.isUserOptimal(userId)
+            _isOptimal.postValue(optimal)
+        }
+    }
 
     /**
      * Factory for instantiating the ViewModel with a context.

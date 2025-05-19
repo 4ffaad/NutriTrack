@@ -41,7 +41,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.livedata.observeAsState
+import coil.compose.AsyncImage
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -56,10 +56,15 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.livedata.observeAsState
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
-import com.daffa_34076492.nutritrack.auth.AuthManager.userId
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.daffa_34076492.nutritrack.ViewModels.FruitViewModel
+import com.daffa_34076492.nutritrack.data.MotivationalMessageRepository
 
 class HomeActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -73,6 +78,12 @@ class HomeActivity : ComponentActivity() {
         setContent {
             NutriTrack_Daffa_34076492Theme {
                 val navController = rememberNavController()
+                val context = LocalContext.current
+                val repository = MotivationalMessageRepository.getInstance(context) // replace with your actual method
+                val fruitViewModel: FruitViewModel = viewModel(
+                    factory = FruitViewModel.Factory(repository)
+                )
+
                 Scaffold(
                     modifier = Modifier.fillMaxSize(),
                     bottomBar = { BottomNavigationBar(navController) }
@@ -81,6 +92,8 @@ class HomeActivity : ComponentActivity() {
                         innerPadding = innerPadding,
                         navController = navController,
                         patientViewModel = patientViewModel,
+                        fruitViewModel = fruitViewModel,
+
                     )
                 }
             }
@@ -99,7 +112,8 @@ class HomeActivity : ComponentActivity() {
 fun NavigationGraph(
     innerPadding: PaddingValues,
     navController: NavHostController,
-    patientViewModel: PatientViewModel
+    patientViewModel: PatientViewModel,
+    fruitViewModel: FruitViewModel
 ) {
     NavHost(
         navController = navController,
@@ -123,7 +137,8 @@ fun NavigationGraph(
             NutricoachScreen(
                 innerPadding = innerPadding,
                 navController = navController,
-                viewModel = patientViewModel
+                patientViewModel = patientViewModel,
+                fruitViewModel = fruitViewModel
             )
         }
         composable("settings") {
@@ -508,69 +523,241 @@ fun InsightScreen(
 fun NutricoachScreen(
     innerPadding: PaddingValues,
     navController: NavHostController,
-    viewModel: PatientViewModel // use the correct ViewModel here
+    patientViewModel: PatientViewModel,
+    fruitViewModel: FruitViewModel
 ) {
-    val selectedFruit by viewModel.selectedFruit
-    val isLoading by viewModel.isLoading
-    val errorMessage by viewModel.fruitErrorMessage
+    val searchQuery = fruitViewModel.searchQuery
+    val selectedFruit by fruitViewModel.selectedFruit
+    val isLoading by fruitViewModel.isLoading
+    val errorMessage by fruitViewModel.fruitErrorMessage
+    val userId = AuthManager.userId
+    val isOptimal by patientViewModel.isOptimal.observeAsState(initial = false)
 
-    var searchQuery by remember { mutableStateOf("") }
+    val motivationalMessage by fruitViewModel.motivationalMessage.collectAsState()
+    val isLoadingMotivation by fruitViewModel.isLoadingMotivation.collectAsState()
+    val motivationError = fruitViewModel.motivationError.collectAsState().value
 
-    Column(
+
+
+    LaunchedEffect(userId) {
+        userId?.let {
+            patientViewModel.checkIfUserOptimal(it)
+        }
+    }
+    LaunchedEffect(Unit) {
+        fruitViewModel.fetchMotivationalMessage()
+    }
+
+
+    LazyColumn(
         modifier = Modifier
             .fillMaxSize()
             .padding(innerPadding)
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
+        item {
+            Text(
+                text = "NutriCoach",
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold
+            )
+        }
 
-        // 🔎 Search Field
-        OutlinedTextField(
-            value = searchQuery,
-            onValueChange = { searchQuery = it },
-            label = { Text("Enter fruit name") },
-            modifier = Modifier.fillMaxWidth(),
-            trailingIcon = {
-                IconButton(onClick = {
-                    if (searchQuery.isNotBlank()) {
-                        viewModel.searchFruit(searchQuery)
+        item {
+            Text(
+                text = if (isOptimal) "✅ Your diet is optimal!" else "⚠️ Your diet needs improvement.",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = if (isOptimal) Color(0xFF2E7D32) else Color(0xFFC62828)
+            )
+        }
+
+        if (isOptimal) {
+            item {
+                AsyncImage(
+                    model = "https://picsum.photos/600/400",
+                    contentDescription = "Random motivational image",
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(200.dp)
+                        .clip(RoundedCornerShape(12.dp)),
+                    contentScale = ContentScale.Crop
+                )
+            }
+            item {
+                Text(
+                    text = "Great job! Your diet is optimal 🎉",
+                    style = MaterialTheme.typography.titleMedium
+                )
+            }
+        } else {
+            item {
+                Text(
+                    text = "Your fruit score could be better. Search for a fruit like 'Banana', 'Orange', or 'Apple' to learn more.",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            }
+
+            item {
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { newQuery -> fruitViewModel.onSearchQueryChange(newQuery) },
+                    label = { Text("Enter fruit name") },
+                    placeholder = { Text("e.g. Banana, Orange, Apple") },
+                    modifier = Modifier.fillMaxWidth(),
+                    trailingIcon = {
+                        IconButton(onClick = {
+                            if (searchQuery.isNotBlank()) {
+                                fruitViewModel.searchFruit(searchQuery)
+                            }
+                        }) {
+                            Icon(Icons.Default.Search, contentDescription = "Search")
+                        }
                     }
-                }) {
-                    Icon(Icons.Default.Search, contentDescription = "Search")
+                )
+            }
+
+            item {
+                when {
+                    isLoading -> {
+                        Box(
+                            modifier = Modifier.fillMaxWidth(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            CircularProgressIndicator()
+                        }
+                    }
+                    errorMessage != null -> {
+                        Text(
+                            text = errorMessage!!,
+                            color = Color.Red,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                    selectedFruit != null -> {
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp),
+                            elevation = CardDefaults.cardElevation(8.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f)
+                            )
+                        ) {
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                Text(
+                                    text = "Name: ${selectedFruit!!.name}",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Spacer(Modifier.height(4.dp))
+                                Text(
+                                    text = "Family: ${selectedFruit!!.family}",
+                                    style = MaterialTheme.typography.bodyMedium
+                                )
+
+                                Text(
+                                    text = "Calories: ${selectedFruit!!.nutritions.calories}",
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                                Text(
+                                    text = "Fat: ${selectedFruit!!.nutritions.fat}",
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                                Text(
+                                    text = "Sugar: ${selectedFruit!!.nutritions.sugar}",
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                                Text(
+                                    text = "Carbohydrates: ${selectedFruit!!.nutritions.carbohydrates}",
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                                Text(
+                                    text = "Protein: ${selectedFruit!!.nutritions.protein}",
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
+                        }
+                    }
                 }
             }
-        )
-
-        // ⏳ Loading
-        if (isLoading) {
-            Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator()
+            item {
+                Divider()
             }
-        }
+            item {
+                Text(
+                    text = "Motivational Message (AI)",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color.Gray,
+                    modifier = Modifier.padding(vertical = 8.dp)
+                )
 
-        // ⚠️ Error Message
-        if (errorMessage != null) {
-            Text(text = errorMessage ?: "", color = Color.Red)
-        }
+            }
 
-        // ✅ Fruit Info Card
-        selectedFruit?.let { fruit ->
+
+        }
+        item {
             Card(
-                modifier = Modifier.fillMaxWidth(),
-                elevation = CardDefaults.cardElevation(6.dp)
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(8.dp)
+                    .shadow(4.dp, RoundedCornerShape(6.dp)),
+                shape = RoundedCornerShape(6.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
             ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text("Fruit Name: ${fruit.name}", fontWeight = FontWeight.Bold)
-                    Text("Family: ${fruit.family}")
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text("Calories: ${fruit.nutritions.calories}")
-                    Text("Fat: ${fruit.nutritions.fat}")
-                    Text("Sugar: ${fruit.nutritions.sugar}")
-                    Text("Carbohydrates: ${fruit.nutritions.carbohydrates}")
-                    Text("Protein: ${fruit.nutritions.protein}")
+                Text(
+                    text = motivationalMessage ?: "No motivational message yet.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier
+                        .padding(16.dp)
+                        .fillMaxWidth()
+                )
+            }
+        }
+
+        item {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                Button(
+                    onClick = { fruitViewModel.fetchMotivationalMessage() },
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(4.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color.White,
+                        contentColor = Color.Black
+                    ),
+                    elevation = ButtonDefaults.elevatedButtonElevation(defaultElevation = 4.dp)
+                ) {
+                    Text("Get Motivation")
+                }
+
+                Button(
+                    onClick = {
+                        val userId = AuthManager.userId
+                        val currentMessage = fruitViewModel.motivationalMessage.value
+                        if (!currentMessage.isNullOrBlank()) {
+                            fruitViewModel.saveMotivationalMessage(userId, currentMessage)
+                        }
+                    },
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(4.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = Color.White
+                    ),
+                    elevation = ButtonDefaults.elevatedButtonElevation(defaultElevation = 4.dp)
+                ) {
+                    Text("Save Message")
                 }
             }
         }
+
+
+
     }
 }
 

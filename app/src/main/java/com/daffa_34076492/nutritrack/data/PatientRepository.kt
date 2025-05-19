@@ -140,12 +140,48 @@ class PatientRepository(private val context: Context) {
         return patientDao.updatePassword(userId, newPassword) > 0
     }
 
-
     suspend fun getHEIFAScore(userId: Int): Double? {
         return patientDao.getHEIFAScore(userId)
     }
 
-    suspend fun getFoodScoresByUserId(userId: Int): Patient? {
+
+    suspend fun getPatientByUserId(userId: Int): Patient? {
         return patientDao.getFoodScoresByUserId(userId)
     }
+
+    suspend fun isUserOptimal(userId: Int): Boolean {
+        val patient = getPatientByUserId(userId) ?: return false
+        val sex = patient.sex.lowercase()
+
+        return if (sex == "male") {
+            (patient.discretionaryServeSize < 3.0) &&
+                    (patient.vegetablesWithLegumesAllocatedServeSize >= 6.0) &&
+                    (patient.fruitServeSize >= 2.0 && patient.fruitVariationsScore >= 2.0) &&
+                    (patient.grainsAndCerealsServeSize >= 6.0 && patient.wholeGrainsServeSize >= patient.grainsAndCerealsServeSize * 0.5) &&
+                    (patient.meatAndAlternativesWithLegumesAllocatedServeSize >= 3.0) &&
+                    (patient.dairyAndAlternativesServeSize >= 2.5) &&
+                    (patient.waterTotalMl >= 1500 && patient.waterTotalMl >= 0.5 * patient.beverageTotalMl) &&
+                    (patient.unsaturatedFatServeSize >= 4.0) &&
+                    (patient.saturatedFat <= 10.0) &&
+                    (patient.sodiumMgMilligrams <= 920.0) &&
+                    (patient.sugar <= 15.0) &&
+                    (patient.alcoholStandardDrinks <= 1.4)
+        } else if (sex == "female") {
+            (patient.discretionaryServeSize < 2.5) &&
+                    (patient.vegetablesWithLegumesAllocatedServeSize >= 5.0) &&
+                    (patient.fruitServeSize >= 2.0 && patient.fruitVariationsScore >= 2.0) &&
+                    (patient.grainsAndCerealsServeSize >= 6.0 && patient.wholeGrainsServeSize >= patient.grainsAndCerealsServeSize * 0.5) &&
+                    (patient.meatAndAlternativesWithLegumesAllocatedServeSize >= 2.5) &&
+                    (patient.dairyAndAlternativesServeSize >= 2.5) &&
+                    (patient.waterTotalMl >= 1500 && patient.waterTotalMl >= 0.5 * patient.beverageTotalMl) &&
+                    (patient.unsaturatedFatServeSize >= 2.0) &&
+                    (patient.saturatedFat <= 10.0) &&
+                    (patient.sodiumMgMilligrams <= 920.0) &&
+                    (patient.sugar <= 15.0) &&
+                    (patient.alcoholStandardDrinks <= 1.4)
+        } else {
+            false
+        }
+    }
+
 }
