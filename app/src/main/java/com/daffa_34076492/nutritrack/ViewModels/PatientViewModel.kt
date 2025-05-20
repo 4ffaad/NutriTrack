@@ -148,6 +148,36 @@ class PatientViewModel(context: Context) : ViewModel() {
         }
     }
 
+
+    private val _averageHeifaMale = MutableStateFlow<Double?>(null)
+    val averageHeifaMale: StateFlow<Double?> = _averageHeifaMale
+
+    private val _averageHeifaFemale = MutableStateFlow<Double?>(null)
+    val averageHeifaFemale: StateFlow<Double?> = _averageHeifaFemale
+
+    fun fetchAverageHeifaScores() {
+        viewModelScope.launch {
+            val maleScore = patientRepo.getAverageHeifaScoreMale()
+            val femaleScore = patientRepo.getAverageHeifaScoreFemale()
+
+            _averageHeifaMale.value = maleScore
+            _averageHeifaFemale.value = femaleScore
+        }
+    }
+
+    private val _allPatients = MutableStateFlow<List<Patient>>(emptyList())
+    val allPatients: StateFlow<List<Patient>> = _allPatients
+
+    fun fetchAllPatients() {
+        viewModelScope.launch {
+            _allPatients.value = patientRepo.getAllPatients()
+        }
+    }
+
+
+
+
+
     /**
      * Factory for instantiating the ViewModel with a context.
      */

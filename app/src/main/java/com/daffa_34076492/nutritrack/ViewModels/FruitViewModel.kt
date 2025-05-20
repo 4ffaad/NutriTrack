@@ -8,16 +8,21 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.daffa_34076492.nutritrack.data.MotivationalMessageRepository
+import com.daffa_34076492.nutritrack.data.PatientRepository
 import com.daffa_34076492.nutritrack.model.MotivationalMessage
+import com.daffa_34076492.nutritrack.model.Patient
 import com.yourpackage.data.api.FruityViceService
 import com.yourpackage.data.model.FruitInfo
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 class FruitViewModel(
-    private val repository: MotivationalMessageRepository
+    private val repository: MotivationalMessageRepository,
+    private val patientRepo: PatientRepository
 ) : ViewModel() {
+
     var selectedFruit = mutableStateOf<FruitInfo?>(null)
         private set
 
@@ -27,6 +32,29 @@ class FruitViewModel(
     var fruitErrorMessage = mutableStateOf<String?>(null)
         private set
 
+    var searchQuery by mutableStateOf("")
+        private set
+
+    private val _motivationalMessage = MutableStateFlow<String?>(null)
+    val motivationalMessage = _motivationalMessage.asStateFlow()
+
+    private val _isLoadingMotivation = MutableStateFlow(false)
+    val isLoadingMotivation = _isLoadingMotivation.asStateFlow()
+
+    private val _motivationError = MutableStateFlow<String?>(null)
+    val motivationError = _motivationError.asStateFlow()
+
+    private val _allMessages = MutableStateFlow<List<MotivationalMessage>>(emptyList())
+    val allMessages: StateFlow<List<MotivationalMessage>> = _allMessages
+
+    private val _patternInsights = MutableStateFlow<List<String>>(emptyList())
+    val patternInsights: StateFlow<List<String>> = _patternInsights
+
+    private val _isLoading = mutableStateOf(false)
+
+    init {
+        loadDefaultFruit()
+    }
 
     fun loadDefaultFruit() {
         viewModelScope.launch {
@@ -59,49 +87,40 @@ class FruitViewModel(
             isLoading.value = false
         }
     }
-    var searchQuery by mutableStateOf("")
-        private set
 
     fun onSearchQueryChange(newQuery: String) {
         searchQuery = newQuery
     }
 
-
-    init {
-        loadDefaultFruit()
-    }
-
-
-    private val _motivationalMessage = MutableStateFlow<String?>(null)
-    val motivationalMessage = _motivationalMessage.asStateFlow()
-
-    private val _isLoadingMotivation = MutableStateFlow(false)
-    val isLoadingMotivation = _isLoadingMotivation.asStateFlow()
-
-    private val _motivationError = MutableStateFlow<String?>(null)
-    val motivationError = _motivationError.asStateFlow()
-
-
-    fun fetchMotivationalMessage() {
+    fun fetchMotivationalMessage(userId: Int) {
         viewModelScope.launch {
             _isLoadingMotivation.value = true
             _motivationError.value = null
             try {
-                val promptOptions = listOf(
-                    "Give me a short, powerful motivational quote to eat healthy. Output only the quote, no explanations.",
-                    "Provide a short motivational message encouraging me to eat more fruits and vegetables. Just the message, no extra text.",
-                    "Say something energizing to inspire healthy eating in one sentence. Output only the sentence.",
-                    "Encourage me to make healthy food choices with a strong sentence. Only output the sentence, nothing else.",
-                    "Give a motivational message about healthy eating. Do not explain—just the message.",
-                    "What would a motivational coach say to encourage eating more fruits and veggies? Output only the motivational message.",
+                val patient = patientRepo.getPatientByUserId(userId)
+                if (patient == null) {
+                    _motivationError.value = "❌ Patient not found."
+                    return@launch
+                }
 
+                val prompt = buildString {
+                    append("Generate a motivational message for a patient with the following details:\n")
+                    append("• Name: ${patient.name}\n")
+                    append("• Gender: ${patient.sex}\n")
+                    append("• HEIFA Score: ${patient.HEIFATotalScore}\n")
+                    append("The message should be short, powerful, and encourage healthy eating. Output only the message, no explanations.")
+                }
+
+                val messageText = repository.getMotivationalMessage(prompt)
+                _motivationalMessage.value = messageText
+
+                val motivationalMessage = MotivationalMessage(
+                    userId = userId,
+                    message = messageText,
+                    timestamp = System.currentTimeMillis()
                 )
+                repository.saveMessage(motivationalMessage)
 
-                val prompt = promptOptions.random() + " (Make it new each time.)"
-
-                val message = repository.getMotivationalMessage(prompt)
-
-                _motivationalMessage.value = message
             } catch (e: Exception) {
                 _motivationError.value = "❌ Failed to fetch motivational message."
                 Log.e("FruitViewModel", "Motivation fetch failed", e)
@@ -111,28 +130,99 @@ class FruitViewModel(
         }
     }
 
-
-    fun saveMotivationalMessage(userId: Int, message: String) {
+    fun loadMessagesForUser(userId: Int) {
         viewModelScope.launch {
-            repository.saveMessage(MotivationalMessage(
-                userId = userId,
-                message = message
-            ))
+            _allMessages.value = repository.getMessagesForUser(userId)
+        }
+    }
+    fun clearAllMessagesForUser(userId: Int) {
+        viewModelScope.launch {
+            repository.clearMessagesForUser(userId)
+            loadMessagesForUser(userId)
         }
     }
 
-    /**
-     * Factory for creating FruitViewModel with a MotivationalMessageRepository.
-     */
-    class Factory(
-        private val repository: MotivationalMessageRepository
-    ) : ViewModelProvider.Factory {
-        override fun <T : ViewModel> create(modelClass: Class<T>): T {
-            if (modelClass.isAssignableFrom(FruitViewModel::class.java)) {
-                @Suppress("UNCHECKED_CAST")
-                return FruitViewModel(repository) as T
+    // Private mutable state
+    private val _isLoadingDataPatterns = MutableStateFlow(false)
+
+    // Public immutable StateFlow without underscore
+    val isLoadingDataPatterns: StateFlow<Boolean> = _isLoadingDataPatterns
+
+    fun analyzeDataPatterns() {
+        viewModelScope.launch {
+            _isLoadingDataPatterns.value = true
+            try {
+                val patients = patientRepo.getAllPatients()
+                val prompt = buildPromptFromPatients(patients)
+                val patterns = repository.getDataPatterns(prompt)
+                _patternInsights.value = patterns
+            } catch (e: Exception) {
+                Log.e("ClinicianViewModel", "Error analyzing patterns: ${e.message}", e)
+            } finally {
+                // Use the correct loading state variable here:
+                _isLoadingDataPatterns.value = false
             }
-            throw IllegalArgumentException("Unknown ViewModel class")
         }
+    }
+
+
+
+    fun buildPromptFromPatients(patients: List<Patient>): String {
+        val csvHeader = "Sex,HEIFATotal,Discretionary,Vegetables,Fruit,Grains,Cereals,WholeGrains,MeatAlt,Dairy,Sodium,Alcohol,Water,Sugar,Fat"
+        val csvData = patients.joinToString("\n") { patient ->
+            listOf(
+                patient.sex,
+                patient.HEIFATotalScore,
+                patient.discretionaryHEIFAScore,
+                patient.vegetablesHEIFAScore,
+                patient.fruitHEIFAScore,
+                patient.grainsAndCerealsHEIFAScore,
+                patient.wholeGrainsHEIFAScore,
+                patient.meatAndAlternativesHEIFAScore,
+                patient.dairyAndAlternativesHEIFAScore,
+                patient.sodiumHEIFAScore,
+                patient.alcoholHEIFAScore,
+                patient.waterHEIFAScore,
+                patient.sugarHEIFAScore,
+                patient.saturatedFatHEIFAScore
+            ).joinToString(",")
+        }
+
+        return """
+        Analyze the following patient data in CSV format:
+        $csvHeader
+        $csvData
+
+        Based on the dataset, identify and explain 3 interesting data patterns.
+        Format your response like:
+        1. ...
+        2. ...
+        3. ...
+
+        Focus on trends like gender differences, correlations between scores (e.g. fruit vs. vegetable), or general nutrition behavior and keep it short.
+    """.trimIndent()
+    }
+
+
+}
+
+
+/**
+ * Factory for creating FruitViewModel with a MotivationalMessageRepository.
+ */
+class FruitViewModelFactory(
+    private val messageRepo: MotivationalMessageRepository,
+    private val patientRepo: PatientRepository
+) : ViewModelProvider.Factory {
+    override fun <T : ViewModel> create(modelClass: Class<T>): T {
+        if (modelClass.isAssignableFrom(FruitViewModel::class.java)) {
+            @Suppress("UNCHECKED_CAST")
+            return FruitViewModel(messageRepo, patientRepo) as T
+        }
+        throw IllegalArgumentException("Unknown ViewModel class")
     }
 }
+
+
+
+

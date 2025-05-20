@@ -197,8 +197,6 @@ fun LoginScreen(paddingValues: PaddingValues, patientViewModel: PatientViewModel
          }
 
      }
-
-
         item {
             Button(
                 onClick = {

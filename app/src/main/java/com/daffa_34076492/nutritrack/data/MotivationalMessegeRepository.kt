@@ -5,11 +5,9 @@ import android.util.Log
 import com.daffa_34076492.nutritrack.api.GeminiApi
 import com.daffa_34076492.nutritrack.data.local.AppDatabase
 import com.daffa_34076492.nutritrack.model.GeminiRequest
-import com.daffa_34076492.nutritrack.model.GenerationConfig
 import com.daffa_34076492.nutritrack.model.MotivationalMessage
 import com.daffa_34076492.nutritrack.model.RequestContent
 import com.daffa_34076492.nutritrack.model.RequestPart
-import kotlinx.coroutines.flow.Flow
 import java.io.IOException
 
 
@@ -20,8 +18,12 @@ class MotivationalMessageRepository(context: Context) {
         motivationalDao.insertMessage(message)
     }
 
-    fun getMessages(userId: Int): Flow<List<MotivationalMessage>> = motivationalDao.getMessagesForUser(userId)
-
+    suspend fun getMessagesForUser(userId: Int): List<MotivationalMessage> {
+        return motivationalDao.getMessagesForUser(userId)
+    }
+    suspend fun clearMessagesForUser(userId: Int) {
+        motivationalDao.clearMessagesForUser(userId)
+    }
     suspend fun getMotivationalMessage(prompt: String): String {
         try {
             val request = GeminiRequest(
@@ -30,10 +32,7 @@ class MotivationalMessageRepository(context: Context) {
                         parts = listOf(RequestPart(text = prompt))
                     )
                 ),
-                generationConfig = GenerationConfig(
-                    temperature = 0.9f,
-                    maxOutputTokens = 20
-                )
+
             )
 
             val response = GeminiApi.service.generateMotivationalMessage(
@@ -52,6 +51,38 @@ class MotivationalMessageRepository(context: Context) {
         } catch (e: Exception) {
             Log.e("MotivationalRepo", "HTTP error: ${e.message}", e)
             throw IOException("Server error occurred. Please try again.")
+        }
+    }
+
+    suspend fun getDataPatterns(prompt: String): List<String> {
+        try {
+            val request = GeminiRequest(
+                contents = listOf(
+                    RequestContent(
+                        parts = listOf(RequestPart(text = prompt))
+                    )
+                )
+            )
+
+            val response = GeminiApi.service.generateMotivationalMessage(
+                apiKey = "AIzaSyCbXhw9tn4fScNLkECfPK9WhpCg5vE55Z4",
+                request = request
+            )
+
+            val fullText = response.candidates
+                ?.firstOrNull()
+                ?.content
+                ?.parts
+                ?.firstOrNull()
+                ?.text ?: return listOf("No patterns found.")
+
+            return fullText
+                .split("\n")
+                .filter { it.trim().matches(Regex("^\\d+\\..*")) }
+
+        } catch (e: Exception) {
+            Log.e("GeminiRepo", "Data pattern fetch error: ${e.message}", e)
+            return listOf("Error occurred. Please try again.")
         }
     }
 

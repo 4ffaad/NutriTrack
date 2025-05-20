@@ -1,5 +1,6 @@
 package com.daffa_34076492.nutritrack.data
 
+import android.annotation.SuppressLint
 import android.content.Context
 import androidx.lifecycle.LiveData
 import com.daffa_34076492.nutritrack.data.local.AppDatabase
@@ -8,7 +9,6 @@ import com.opencsv.CSVReader
 import java.io.InputStreamReader
 
 class PatientRepository(private val context: Context) {
-
     private val patientDao = AppDatabase.getDatabase(context).patientDao()
 
 
@@ -143,8 +143,6 @@ class PatientRepository(private val context: Context) {
     suspend fun getHEIFAScore(userId: Int): Double? {
         return patientDao.getHEIFAScore(userId)
     }
-
-
     suspend fun getPatientByUserId(userId: Int): Patient? {
         return patientDao.getFoodScoresByUserId(userId)
     }
@@ -183,5 +181,36 @@ class PatientRepository(private val context: Context) {
             false
         }
     }
+
+    suspend fun getAverageHeifaScoreMale(): Double? {
+        return patientDao.getAverageHeifaScoreMale()
+    }
+
+    suspend fun getAverageHeifaScoreFemale(): Double? {
+        return patientDao.getAverageHeifaScoreFemale()
+    }
+
+    suspend fun getAllPatients(): List<Patient> {
+        return patientDao.getAllPatients()
+    }
+
+    companion object {
+        @SuppressLint("StaticFieldLeak")
+        @Volatile
+        private var INSTANCE: PatientRepository? = null
+
+        fun getInstance(context: Context): PatientRepository {
+            val appContext = context.applicationContext
+            return INSTANCE ?: synchronized(this) {
+                val instance = PatientRepository(context)
+                INSTANCE = instance
+                instance
+            }
+        }
+
+    }
+
+
+
 
 }

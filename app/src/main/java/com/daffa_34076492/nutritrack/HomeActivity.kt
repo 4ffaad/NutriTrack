@@ -51,7 +51,11 @@ import com.daffa_34076492.nutritrack.ViewModels.PatientViewModel
 import com.daffa_34076492.nutritrack.auth.AuthManager
 import com.daffa_34076492.nutritrack.ui.theme.NutriTrack_Daffa_34076492Theme
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
@@ -59,12 +63,19 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.daffa_34076492.nutritrack.ViewModels.FruitViewModel
+import com.daffa_34076492.nutritrack.ViewModels.FruitViewModelFactory
 import com.daffa_34076492.nutritrack.data.MotivationalMessageRepository
+import com.daffa_34076492.nutritrack.data.PatientRepository
 
 class HomeActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -74,15 +85,18 @@ class HomeActivity : ComponentActivity() {
             this,
             PatientViewModel.PatientViewModelFactory(this)
         )[PatientViewModel::class.java]
+        val patientRepo = PatientRepository.getInstance(applicationContext)
+
 
         setContent {
             NutriTrack_Daffa_34076492Theme {
                 val navController = rememberNavController()
                 val context = LocalContext.current
                 val repository = MotivationalMessageRepository.getInstance(context) // replace with your actual method
-                val fruitViewModel: FruitViewModel = viewModel(
-                    factory = FruitViewModel.Factory(repository)
-                )
+
+                val factory = FruitViewModelFactory(repository, patientRepo)
+                val fruitViewModel = ViewModelProvider(this, factory).get(FruitViewModel::class.java)
+
 
                 Scaffold(
                     modifier = Modifier.fillMaxSize(),
@@ -151,6 +165,7 @@ fun NavigationGraph(
         composable("clinician_login") {
             ClinicianLoginScreen(
                 viewModel = patientViewModel,
+                fruitViewModel = fruitViewModel,
                 onAuthenticated = {
                     // Navigate to clinician dashboard and remove login from back stack
                     navController.navigate("clinician_dashboard") {
@@ -532,10 +547,10 @@ fun NutricoachScreen(
     val errorMessage by fruitViewModel.fruitErrorMessage
     val userId = AuthManager.userId
     val isOptimal by patientViewModel.isOptimal.observeAsState(initial = false)
-
     val motivationalMessage by fruitViewModel.motivationalMessage.collectAsState()
-    val isLoadingMotivation by fruitViewModel.isLoadingMotivation.collectAsState()
-    val motivationError = fruitViewModel.motivationError.collectAsState().value
+    var showHistoryDialog by remember { mutableStateOf(false) }
+    val allMessages by fruitViewModel.allMessages.collectAsState()
+
 
 
 
@@ -545,7 +560,7 @@ fun NutricoachScreen(
         }
     }
     LaunchedEffect(Unit) {
-        fruitViewModel.fetchMotivationalMessage()
+        fruitViewModel.fetchMotivationalMessage(userId)
     }
 
 
@@ -698,24 +713,36 @@ fun NutricoachScreen(
 
 
         }
+
         item {
+            val message = motivationalMessage
+
             Card(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(8.dp)
-                    .shadow(4.dp, RoundedCornerShape(6.dp)),
-                shape = RoundedCornerShape(6.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-            ) {
-                Text(
-                    text = motivationalMessage ?: "No motivational message yet.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    modifier = Modifier
-                        .padding(16.dp)
-                        .fillMaxWidth()
+                    .fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                elevation = CardDefaults.cardElevation(8.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f)
                 )
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    if (message.isNullOrBlank()) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.align(Alignment.CenterHorizontally),
+                            strokeWidth = 3.dp
+                        )
+                    } else {
+                        Text(
+                            text = message,
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                }
             }
         }
+
 
         item {
             Row(
@@ -723,7 +750,7 @@ fun NutricoachScreen(
                 horizontalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 Button(
-                    onClick = { fruitViewModel.fetchMotivationalMessage() },
+                    onClick = { fruitViewModel.fetchMotivationalMessage(userId) },
                     modifier = Modifier.weight(1f),
                     shape = RoundedCornerShape(4.dp),
                     colors = ButtonDefaults.buttonColors(
@@ -734,14 +761,10 @@ fun NutricoachScreen(
                 ) {
                     Text("Get Motivation")
                 }
-
                 Button(
                     onClick = {
-                        val userId = AuthManager.userId
-                        val currentMessage = fruitViewModel.motivationalMessage.value
-                        if (!currentMessage.isNullOrBlank()) {
-                            fruitViewModel.saveMotivationalMessage(userId, currentMessage)
-                        }
+                        fruitViewModel.loadMessagesForUser(userId ?: 0)
+                        showHistoryDialog = true
                     },
                     modifier = Modifier.weight(1f),
                     shape = RoundedCornerShape(4.dp),
@@ -751,7 +774,99 @@ fun NutricoachScreen(
                     ),
                     elevation = ButtonDefaults.elevatedButtonElevation(defaultElevation = 4.dp)
                 ) {
-                    Text("Save Message")
+                    Icon(Icons.Default.History, contentDescription = "History", modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("AI Tips History")
+                }
+            }
+        }
+
+        item {
+            if (showHistoryDialog) {
+                Dialog(
+                    onDismissRequest = { showHistoryDialog = false }
+                ) {
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxWidth(0.95f)
+                            .heightIn(min = 200.dp, max = 500.dp)
+                            .padding(16.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.background,
+                        shadowElevation = 8.dp
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "AI Tips History",
+                                    style = MaterialTheme.typography.headlineSmall,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                IconButton(onClick = { showHistoryDialog = false }) {
+                                    Icon(Icons.Default.Close, contentDescription = "Close")
+                                }
+                            }
+                            Divider(modifier = Modifier.padding(vertical = 8.dp))
+
+                            if (allMessages.isEmpty()) {
+                                Box(
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text("No motivational tips saved yet.")
+                                }
+                            } else {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .weight(1f)
+                                        .verticalScroll(rememberScrollState())
+                                ) {
+                                    allMessages.forEach { msg ->
+                                        Card(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(vertical = 6.dp),
+                                            colors = CardDefaults.cardColors(containerColor = Color.White),
+                                            elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
+                                            shape = RoundedCornerShape(12.dp)
+                                        ) {
+                                            Column(modifier = Modifier.padding(16.dp)) {
+                                                Text(
+                                                    text = msg.message,
+                                                    style = MaterialTheme.typography.bodyLarge,
+                                                    color = Color.Black
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.height(12.dp))
+
+                                Text(
+                                    text = "Clear Messages",
+                                    modifier = Modifier
+                                        .align(Alignment.CenterHorizontally)
+                                        .clickable {
+                                            fruitViewModel.clearAllMessagesForUser(userId)
+                                        }
+                                        .padding(8.dp),
+                                    color = MaterialTheme.colorScheme.primary,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -760,8 +875,6 @@ fun NutricoachScreen(
 
     }
 }
-
-
 
 /**
  * SettingsScreen displays the user account details and account management options such as Logout and Clinician Login.
@@ -895,123 +1008,322 @@ fun SettingsScreen(
 @Composable
 fun ClinicianLoginScreen(
     viewModel: PatientViewModel,
+    fruitViewModel: FruitViewModel,
     onAuthenticated: () -> Unit
 ) {
-    val context = LocalContext.current
     val isAuthenticated = viewModel.isAuthenticated
     val passphraseInput = viewModel.passphraseInput
     val errorMessage = viewModel.errorMessage
-
-    // State to toggle password visibility
+    val patternInsights by fruitViewModel.patternInsights.collectAsState()
     var passwordVisible by remember { mutableStateOf(false) }
+    val isLoading by fruitViewModel.isLoadingDataPatterns.collectAsState()
 
-    if (isAuthenticated) {
-        LaunchedEffect(Unit) {
-            context.startActivity(Intent(context, ClinicianActivity::class.java))
-            onAuthenticated()
+
+
+    LaunchedEffect(isAuthenticated) {
+        if (isAuthenticated) {
+            viewModel.fetchAverageHeifaScores()
         }
-    } else {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(MaterialTheme.colorScheme.background),
-            contentAlignment = Alignment.Center
-        ) {
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth(0.9f)
-                    .wrapContentHeight(),
-                shape = RoundedCornerShape(20.dp),
-                elevation = CardDefaults.cardElevation(defaultElevation = 12.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f)
+    }
+
+    val maleAverage by viewModel.averageHeifaMale.collectAsState()
+    val femaleAverage by viewModel.averageHeifaFemale.collectAsState()
+
+
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(24.dp),
+        verticalArrangement = Arrangement.spacedBy(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        if (isAuthenticated) {
+            // ───────── HEIFA Scores Section ─────────
+            item {
+                Text(
+                    text = "HEIFA Score Averages",
+                    style = MaterialTheme.typography.headlineSmall,
+                    modifier = Modifier.fillMaxWidth()
                 )
-            ) {
+            }
+
+            item {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth(0.9f)
+                        .height(80.dp)
+                        .padding(vertical = 8.dp)
+                        .shadow(12.dp, shape = RoundedCornerShape(12.dp)),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color.White)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(horizontal = 16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Male,
+                            contentDescription = "Male Icon",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(36.dp)
+                        )
+                        Text(
+                            text = "Male Average: ${maleAverage?.let { "%.2f".format(it) } ?: "--"}",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = Color.Black
+                        )
+                    }
+                }
+            }
+
+            item {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth(0.9f)
+                        .height(80.dp)
+                        .padding(vertical = 8.dp)
+                        .shadow(12.dp, shape = RoundedCornerShape(12.dp)),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color.White)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(horizontal = 16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Female,
+                            contentDescription = "Female Icon",
+                            tint = MaterialTheme.colorScheme.secondary,
+                            modifier = Modifier.size(36.dp)
+                        )
+                        Text(
+                            text = "Female Average: ${femaleAverage?.let { "%.2f".format(it) } ?: "--"}",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = Color.Black
+                        )
+                    }
+                }
+            }
+
+            item {
+                Divider(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 16.dp),
+                    thickness = 1.dp,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)
+                )
+            }
+
+// ───────── Analysis Trigger Button ─────────
+            item {
                 Column(
                     modifier = Modifier
-                        .padding(24.dp),
-                    verticalArrangement = Arrangement.spacedBy(20.dp),
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-
-                    // Title Row with Icon
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.MedicalServices,
-                            contentDescription = "Clinician Icon",
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier
-                                .size(40.dp)
-                                .padding(end = 12.dp)
-                        )
-                        Text(
-                            text = "Clinician Login",
-                            style = MaterialTheme.typography.headlineSmall.copy(
-                                fontWeight = FontWeight.Bold
-                            ),
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                    }
-
-                    OutlinedTextField(
-                        value = passphraseInput,
-                        onValueChange = { viewModel.passphraseInput = it },
-                        label = { Text("Clinician Key") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                        visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
-                        trailingIcon = {
-                            val icon = if (passwordVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility
-                            val description = if (passwordVisible) "Hide password" else "Show password"
-
-                            IconButton(onClick = { passwordVisible = !passwordVisible }) {
-                                Icon(imageVector = icon, contentDescription = description)
-                            }
-                        }
-                    )
-
                     Button(
-                        onClick = { viewModel.authenticate() },
+                        onClick = { fruitViewModel.analyzeDataPatterns() },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(56.dp)
-                            .shadow(8.dp, RoundedCornerShape(12.dp)),
+                            .height(50.dp),
                         shape = RoundedCornerShape(12.dp),
-                        contentPadding = PaddingValues(horizontal = 24.dp, vertical = 12.dp)
+                        enabled = !isLoading // disable button when loading
                     ) {
-                        Icon(
-                            imageVector = Icons.Filled.AdminPanelSettings,
-                            contentDescription = "Clinician Icon",
-                            modifier = Modifier
-                                .size(40.dp)
-                                .padding(end = 8.dp)
-                        )
+                        Text("Analyze Data Patterns")
+                    }
+
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    if (isLoading) {
+                        CircularProgressIndicator()
+                    }
+                }
+            }
+
+
+                if (patternInsights.isNotEmpty()) {
+                    item {
                         Text(
-                            text = "Clinician Login",
-                            style = MaterialTheme.typography.bodyLarge.copy(
-                                fontWeight = FontWeight.SemiBold
-                            )
+                            text = "AI-Generated Insights:",
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(start = 20.dp, top = 12.dp, bottom = 8.dp)
                         )
                     }
 
-                    if (errorMessage != null) {
-                        Text(
-                            text = errorMessage,
-                            color = MaterialTheme.colorScheme.error,
-                            style = MaterialTheme.typography.bodyMedium,
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier.fillMaxWidth()
-                        )
+                    items(patternInsights) { pattern ->
+                        val regex = Regex("""^(\d+\.)\s+(.*)$""")
+                        val match = regex.find(pattern)
+                        val annotatedText = if (match != null) {
+                            val number = match.groupValues[1]
+                            val text = match.groupValues[2].replace("**", "")
+                            buildAnnotatedString {
+                                withStyle(style = SpanStyle(fontWeight = FontWeight.Bold)) {
+                                    append(number + " ")
+                                }
+                                append(text)
+                            }
+                        } else {
+                            AnnotatedString(pattern.replace("**", ""))
+                        }
+
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 6.dp),
+                            shape = RoundedCornerShape(12.dp),
+                            elevation = CardDefaults.cardElevation(4.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                        ) {
+                            Text(
+                                text = annotatedText,
+                                style = MaterialTheme.typography.bodyMedium,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(16.dp),
+                                softWrap = true
+                            )
+                        }
+                    }
+
+                    item {
+                        Spacer(modifier = Modifier.height(100.dp))
+                    }
+
+                }
+
+
+        } else {
+            // ───────── Login Form ─────────
+            item {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .wrapContentHeight(),
+                        shape = RoundedCornerShape(20.dp),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 12.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f))
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(24.dp),
+                            verticalArrangement = Arrangement.spacedBy(20.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.MedicalServices,
+                                    contentDescription = "Clinician Icon",
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier
+                                        .size(40.dp)
+                                        .padding(end = 12.dp)
+                                )
+                                Text(
+                                    text = "Clinician Login",
+                                    style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+
+                            OutlinedTextField(
+                                value = passphraseInput,
+                                onValueChange = { viewModel.passphraseInput = it },
+                                label = { Text("Clinician Key") },
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth(),
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                                visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                                trailingIcon = {
+                                    val icon = if (passwordVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility
+                                    IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                                        Icon(imageVector = icon, contentDescription = null)
+                                    }
+                                }
+                            )
+
+                            Button(
+                                onClick = { viewModel.authenticate() },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(56.dp)
+                                    .shadow(8.dp, RoundedCornerShape(12.dp)),
+                                shape = RoundedCornerShape(12.dp),
+                                contentPadding = PaddingValues(horizontal = 24.dp, vertical = 12.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.AdminPanelSettings,
+                                    contentDescription = null,
+                                    modifier = Modifier
+                                        .size(40.dp)
+                                        .padding(end = 8.dp)
+                                )
+                                Text(
+                                    text = "Clinician Login",
+                                    style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold)
+                                )
+                            }
+
+                            // 🔹 Optional Insights for unauthenticated (preview mode)
+                            if (patternInsights.isNotEmpty()) {
+                                Spacer(modifier = Modifier.height(16.dp))
+                                Text(
+                                    text = "AI-Generated Insights:",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    modifier = Modifier.padding(start = 16.dp)
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+
+                                patternInsights.forEach { pattern ->
+                                    Card(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 16.dp, vertical = 4.dp),
+                                        shape = RoundedCornerShape(12.dp),
+                                        elevation = CardDefaults.cardElevation(4.dp)
+                                    ) {
+                                        Text(
+                                            text = pattern,
+                                            modifier = Modifier.padding(16.dp),
+                                            style = MaterialTheme.typography.bodyMedium
+                                        )
+                                    }
+                                }
+                            }
+
+                            if (errorMessage != null) {
+                                Text(
+                                    text = errorMessage,
+                                    color = MaterialTheme.colorScheme.error,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    textAlign = TextAlign.Center,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
+                        }
                     }
                 }
             }
         }
     }
 }
+
+
 
 /**
  * InfoRow displays an icon alongside a label and value in a horizontal row, used for showing key-value pairs.

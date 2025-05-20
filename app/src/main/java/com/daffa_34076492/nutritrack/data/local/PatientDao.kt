@@ -55,8 +55,14 @@ interface PatientDao {
     @Query("SELECT * FROM patient_table WHERE userId = :userId")
     suspend fun getFoodScoresByUserId(userId: Int): Patient?
 
+    @Query("SELECT AVG(HEIFATotalScore) FROM patient_table WHERE sex = 'Male'")
+    suspend fun getAverageHeifaScoreMale(): Double?
 
-
+    @Query("SELECT AVG(HEIFATotalScore) FROM patient_table WHERE sex = 'Female'")
+    suspend fun getAverageHeifaScoreFemale(): Double?
+    
+    @Query("SELECT * FROM patient_table")
+    suspend fun getAllPatients(): List<Patient>
 
 
 }
