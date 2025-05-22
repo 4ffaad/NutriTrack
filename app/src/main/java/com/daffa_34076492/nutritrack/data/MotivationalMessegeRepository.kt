@@ -86,6 +86,29 @@ class MotivationalMessageRepository(context: Context) {
         }
     }
 
+    suspend fun generateMotivationalTip(prompt: String): String {
+        val request = GeminiRequest(
+            contents = listOf(
+                RequestContent(
+                    parts = listOf(RequestPart(text = prompt))
+                )
+            )
+        )
+
+        return try {
+            val response = GeminiApi.service.generateMotivationalMessage(
+                apiKey = "AIzaSyCbXhw9tn4fScNLkECfPK9WhpCg5vE55Z4",
+                request = request
+            )
+            // Extract the first candidate's first part's text
+            response.candidates?.firstOrNull()
+                ?.content?.parts?.firstOrNull()
+                ?.text ?: "Stay healthy and strong!"
+        } catch (e: Exception) {
+            "Remember to hydrate and eat well!" // fallback message
+        }
+    }
+
 
     companion object {
         @Volatile

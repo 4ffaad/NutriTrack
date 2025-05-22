@@ -3,6 +3,8 @@
     xmlns:tools="http://schemas.android.com/tools">
     <uses-permission android:name="android.permission.INTERNET" />
 
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
     <application
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
@@ -17,11 +19,6 @@
             android:name=".PasswordResetActivity"
             android:exported="false"
             android:label="@string/title_activity_password_reset"
-            android:theme="@style/Theme.NutriTrack_Daffa_34076492" />
-        <activity
-            android:name=".ClinicianActivity"
-            android:exported="false"
-            android:label="@string/title_activity_clinician"
             android:theme="@style/Theme.NutriTrack_Daffa_34076492" />
         <activity
             android:name=".RegisterActivity"
@@ -55,7 +52,6 @@
             android:theme="@style/Theme.NutriTrack_Daffa_34076492">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
-
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>

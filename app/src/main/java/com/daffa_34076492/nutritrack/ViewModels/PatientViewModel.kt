@@ -15,7 +15,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.State
 import androidx.lifecycle.MutableLiveData
-import com.daffa_34076492.nutritrack.auth.AuthManager
+import com.daffa_34076492.nutritrack.workers.AuthManager
 
 
 /**

@@ -29,7 +29,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import com.daffa_34076492.nutritrack.ViewModels.PatientViewModel
-import com.daffa_34076492.nutritrack.auth.AuthManager
+import com.daffa_34076492.nutritrack.workers.AuthManager
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.ui.text.SpanStyle
@@ -38,11 +38,11 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withStyle
 
 
+
 class LoginActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-
         setContent {
             NutriTrack_Daffa_34076492Theme {
                 val viewModel: PatientViewModel = ViewModelProvider(

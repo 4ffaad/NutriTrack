@@ -52,6 +52,11 @@ class FruitViewModel(
 
     private val _isLoading = mutableStateOf(false)
 
+    private val _isLoadingDataPatterns = MutableStateFlow(false)
+
+    val isLoadingDataPatterns: StateFlow<Boolean> = _isLoadingDataPatterns
+
+
     init {
         loadDefaultFruit()
     }
@@ -93,6 +98,8 @@ class FruitViewModel(
     }
 
     fun fetchMotivationalMessage(userId: Int) {
+        if (_motivationalMessage.value != null) return // Already fetched
+
         viewModelScope.launch {
             _isLoadingMotivation.value = true
             _motivationError.value = null
@@ -141,13 +148,6 @@ class FruitViewModel(
             loadMessagesForUser(userId)
         }
     }
-
-    // Private mutable state
-    private val _isLoadingDataPatterns = MutableStateFlow(false)
-
-    // Public immutable StateFlow without underscore
-    val isLoadingDataPatterns: StateFlow<Boolean> = _isLoadingDataPatterns
-
     fun analyzeDataPatterns() {
         viewModelScope.launch {
             _isLoadingDataPatterns.value = true
@@ -164,8 +164,6 @@ class FruitViewModel(
             }
         }
     }
-
-
 
     fun buildPromptFromPatients(patients: List<Patient>): String {
         val csvHeader = "Sex,HEIFATotal,Discretionary,Vegetables,Fruit,Grains,Cereals,WholeGrains,MeatAlt,Dairy,Sodium,Alcohol,Water,Sugar,Fat"

@@ -11,18 +11,14 @@ import java.io.InputStreamReader
 class PatientRepository(private val context: Context) {
     private val patientDao = AppDatabase.getDatabase(context).patientDao()
 
-
-    // Returns the total number of patients in the database
     suspend fun getPatientCount(): Int {
         return patientDao.getPatientCount()
     }
 
-    // Returns a LiveData list of all registered user IDs
     fun getUserIds(): LiveData<List<Int>> {
         return patientDao.getUserIds()
     }
 
-    // Returns 1 if login credentials are valid, otherwise 0
     suspend fun verifyLogin(userId: Int, password: String): Int {
         return patientDao.verifyLogin(userId, password)
     }
@@ -55,7 +51,6 @@ class PatientRepository(private val context: Context) {
         return patientDao.registerPassword(userId, password, name) > 0
     }
 
-    // Loads all patient records from CSV and inserts them into the database (only called on first launch)
     suspend fun populateDatabaseFromCSV() {
         val inputStream = context.assets.open("data.csv")
         val reader = CSVReader(InputStreamReader(inputStream))

@@ -40,8 +40,16 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.ViewModelProvider
 import com.daffa_34076492.nutritrack.ViewModels.PatientViewModel
 import androidx.compose.material.icons.Icons
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
 import com.daffa_34076492.nutritrack.ui.theme.NutriTrack_Daffa_34076492Theme
 import androidx.compose.material3.Icon
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.livedata.observeAsState
+import androidx.compose.runtime.remember
 
 
 /**
@@ -79,6 +87,7 @@ class RegisterActivity : ComponentActivity() {
  * @param patientViewModel The ViewModel responsible for patient data handling.
  * @param modifier Modifier for styling.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RegisterScreen(patientViewModel: PatientViewModel, modifier: Modifier = Modifier) {
     var userId by rememberSaveable { mutableStateOf("") }
@@ -89,11 +98,10 @@ fun RegisterScreen(patientViewModel: PatientViewModel, modifier: Modifier = Modi
     var successMessage by rememberSaveable { mutableStateOf("") }
     var alreadyRegistered by rememberSaveable { mutableStateOf<Boolean?>(null) }
     var name by rememberSaveable { mutableStateOf("") }
-
-    // Password visibility states
+    var expanded by remember { mutableStateOf(false) }
     var passwordVisible by rememberSaveable { mutableStateOf(false) }
     var confirmPasswordVisible by rememberSaveable { mutableStateOf(false) }
-
+    val userIds by patientViewModel.userIds.observeAsState(emptyList())
     val context = LocalContext.current
 
     Column(
@@ -110,28 +118,59 @@ fun RegisterScreen(patientViewModel: PatientViewModel, modifier: Modifier = Modi
                 Text("Register", fontSize = 24.sp, fontWeight = FontWeight.Bold)
             }
 
-            // User ID input with validation if already registered
             item {
-                OutlinedTextField(
-                    value = userId,
-                    onValueChange = {
-                        userId = it
-                        val idInt = it.toIntOrNull()
-                        if (idInt != null) {
-                            patientViewModel.checkIfPasswordSet(idInt) { isSet ->
-                                alreadyRegistered = isSet
-                            }
-                        } else {
-                            alreadyRegistered = null
+                ExposedDropdownMenuBox(
+                    expanded = expanded,
+                    onExpandedChange = { expanded = !expanded }
+                ) {
+                    OutlinedTextField(
+                        value = userId,
+                        onValueChange = {userId = it },
+                        readOnly = true,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .menuAnchor(),
+                        label = { Text("My ID (Provided by your Clinician)") },
+                        shape = RoundedCornerShape(16.dp),
+                        trailingIcon = {
+                            ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded)
+                        },
+                        colors = OutlinedTextFieldDefaults.colors(
+                            unfocusedBorderColor = MaterialTheme.colorScheme.outline,
+                            focusedBorderColor = MaterialTheme.colorScheme.primary
+                        )
+                    )
+
+                    ExposedDropdownMenu(
+                        expanded = expanded,
+                        onDismissRequest = { expanded = false }
+                    ) {
+                        userIds.forEach { id ->
+                            DropdownMenuItem(
+                                text = { Text(id.toString()) },
+                                onClick = {
+                                    userId = id.toString()
+                                    expanded = false
+                                    patientViewModel.checkIfPasswordSet(id) { isSet ->
+                                        alreadyRegistered = isSet
+                                    }
+                                }
+                            )
                         }
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text("My ID (Provided by your Clinician)") },
-                    shape = RoundedCornerShape(16.dp),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
-                )
+                    }
+                }
             }
 
+// Show message if already registered
+            if (alreadyRegistered == true) {
+                item {
+                    Text(
+                        text = "This user has already registered.",
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            }
             // Show message if already registered
             if (alreadyRegistered == true) {
                 item {

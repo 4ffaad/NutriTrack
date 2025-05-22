@@ -29,7 +29,7 @@ import com.daffa_34076492.nutritrack.ui.theme.NutriTrack_Daffa_34076492Theme
 import java.util.*
 import androidx.lifecycle.ViewModelProvider
 import com.daffa_34076492.nutritrack.ViewModels.FoodIntakeViewModel
-import com.daffa_34076492.nutritrack.auth.AuthManager
+import com.daffa_34076492.nutritrack.workers.AuthManager
 
 import kotlin.jvm.java
 

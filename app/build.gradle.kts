@@ -73,18 +73,14 @@ dependencies {
     implementation ("androidx.lifecycle:lifecycle-viewmodel-ktx:2.6.2")
     implementation("androidx.compose.runtime:runtime-livedata")
 
-    // Retrofit
     implementation("com.squareup.retrofit2:retrofit:2.11.0")
-
-    // Gson converter for Retrofit
     implementation("com.squareup.retrofit2:converter-gson:2.11.0")
-
-    // Kotlin Coroutines (needed for suspend functions)
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.6.4")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.6.4")
-
     implementation ("io.coil-kt:coil-compose:2.4.0" )
-
     implementation ("com.squareup.okhttp3:logging-interceptor:4.11.0")
+    implementation ("androidx.core:core-ktx:1.10.1")
+    implementation ("androidx.work:work-runtime-ktx:2.9.0")
+
 
 }

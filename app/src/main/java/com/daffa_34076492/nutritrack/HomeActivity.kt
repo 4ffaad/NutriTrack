@@ -1,11 +1,14 @@
 package com.daffa_34076492.nutritrack
+
+import DailyTipWorker
 import android.annotation.SuppressLint
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -48,7 +51,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.lifecycle.ViewModelProvider
 import androidx.navigation.compose.currentBackStackEntryAsState
 import com.daffa_34076492.nutritrack.ViewModels.PatientViewModel
-import com.daffa_34076492.nutritrack.auth.AuthManager
+import com.daffa_34076492.nutritrack.workers.AuthManager
 import com.daffa_34076492.nutritrack.ui.theme.NutriTrack_Daffa_34076492Theme
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -71,33 +74,63 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.window.Dialog
-import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
+import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.PeriodicWorkRequestBuilder
+import androidx.work.WorkManager
 import com.daffa_34076492.nutritrack.ViewModels.FruitViewModel
 import com.daffa_34076492.nutritrack.ViewModels.FruitViewModelFactory
 import com.daffa_34076492.nutritrack.data.MotivationalMessageRepository
 import com.daffa_34076492.nutritrack.data.PatientRepository
+import com.daffa_34076492.nutritrack.workers.NotificationHelper
+import java.util.Calendar
+import java.util.concurrent.TimeUnit
+import android.Manifest
+
 
 class HomeActivity : ComponentActivity() {
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
+                != PackageManager.PERMISSION_GRANTED
+            ) {
+                ActivityCompat.requestPermissions(
+                    this,
+                    arrayOf(Manifest.permission.POST_NOTIFICATIONS),
+                    100
+                )
+            }
+        }
+
+
+        val request = PeriodicWorkRequestBuilder<DailyTipWorker>(8, TimeUnit.HOURS)
+            .setInitialDelay(calculateInitialDelay(), TimeUnit.MILLISECONDS)
+            .build()
+
+        WorkManager.getInstance(this).enqueueUniquePeriodicWork(
+            "daily_tip_3x",
+            ExistingPeriodicWorkPolicy.REPLACE,
+            request
+        )
+
+
+        val patientRepo = PatientRepository.getInstance(applicationContext)
+        val motivationalRepo = MotivationalMessageRepository.getInstance(applicationContext)
         val patientViewModel = ViewModelProvider(
             this,
             PatientViewModel.PatientViewModelFactory(this)
         )[PatientViewModel::class.java]
-        val patientRepo = PatientRepository.getInstance(applicationContext)
+        val fruitFactory = FruitViewModelFactory(motivationalRepo, patientRepo)
+        val fruitViewModel = ViewModelProvider(this, fruitFactory)[FruitViewModel::class.java]
 
-
+        // 🎨 Compose UI
         setContent {
             NutriTrack_Daffa_34076492Theme {
                 val navController = rememberNavController()
-                val context = LocalContext.current
-                val repository = MotivationalMessageRepository.getInstance(context) // replace with your actual method
-
-                val factory = FruitViewModelFactory(repository, patientRepo)
-                val fruitViewModel = ViewModelProvider(this, factory).get(FruitViewModel::class.java)
-
-
                 Scaffold(
                     modifier = Modifier.fillMaxSize(),
                     bottomBar = { BottomNavigationBar(navController) }
@@ -107,12 +140,40 @@ class HomeActivity : ComponentActivity() {
                         navController = navController,
                         patientViewModel = patientViewModel,
                         fruitViewModel = fruitViewModel,
-
                     )
                 }
             }
         }
     }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<String>,
+        grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+
+        if (requestCode == 100 &&
+            grantResults.isNotEmpty() &&
+            grantResults[0] == PackageManager.PERMISSION_GRANTED
+        ) {
+            NotificationHelper.showNotification(this, "NutriCoach Tip", "Thanks for enabling notifications!")
+        }
+    }
+}
+fun calculateInitialDelay(): Long {
+    val now = Calendar.getInstance()
+
+    val morning = Calendar.getInstance().apply { set(Calendar.HOUR_OF_DAY, 8); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0) }
+    val afternoon = Calendar.getInstance().apply { set(Calendar.HOUR_OF_DAY, 14); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0) }
+    val evening = Calendar.getInstance().apply { set(Calendar.HOUR_OF_DAY, 20); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0) }
+
+    val nextTimes = listOf(morning, afternoon, evening)
+        .filter { it.after(now) }
+
+    val nextRun = if (nextTimes.isNotEmpty()) nextTimes.minByOrNull { it.timeInMillis }!! else morning.apply { add(Calendar.DATE, 1) }
+
+    return nextRun.timeInMillis - now.timeInMillis
 }
 
 /**
@@ -557,12 +618,10 @@ fun NutricoachScreen(
     LaunchedEffect(userId) {
         userId?.let {
             patientViewModel.checkIfUserOptimal(it)
+            fruitViewModel.fetchMotivationalMessage(it)
+
         }
     }
-    LaunchedEffect(Unit) {
-        fruitViewModel.fetchMotivationalMessage(userId)
-    }
-
 
     LazyColumn(
         modifier = Modifier
